@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.2.2",
-    versionName: "Travel Ready Mode",
-    versionLabel: "旅行就绪模式",
-    lastUpdated: "2026-07-19T20:07:50+08:00",
+    version: "1.2.3",
+    versionName: "Final Departure Checklist",
+    versionLabel: "出发前24小时最终检查版",
+    lastUpdated: "2026-07-19T20:58:27+08:00",
     weatherNote: "等待人工录入",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -288,6 +288,46 @@ window.TRIP_DATA = {
     completionRate: 0,
     highPriorityRemaining: 21
   },
+  finalDepartureChecklist: [
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "确认护照", description: "护照随身携带；确认有效期超过6个月。", priority: "HIGH", completed: false },
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "保存电子资料", description: "将往返机票、酒店订单、MDAC、印尼入境卡和Bali Tourist Tax凭证分别保存到手机相册和文件App；项目中不保存私人二维码或完整订单。", priority: "HIGH", completed: false },
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "手机充满电", description: "两台手机充满电并确认次日闹钟。", priority: "HIGH", completed: false },
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "携带充电设备", description: "携带充电器、数据线和充电宝；充电宝必须随身携带，不托运。", priority: "HIGH", completed: false },
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "确认eSIM", description: "确认eSIM购买完成、激活时间及是否需要落地后开启。", priority: "HIGH", completed: false },
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "测试旅行APP登录", description: "确认Grab、WhatsApp和Google Maps可正常登录或打开。", priority: "HIGH", completed: false },
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "准备马币MYR", description: "建议准备300-500 MYR；不要携带全部现金出门。", priority: "MEDIUM", completed: false },
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "准备印尼盾IDR", description: "建议准备100万-150万 IDR；不要一次兑换大量现金。", priority: "MEDIUM", completed: false },
+    { phase: "Phase 1 出发前晚上", time: "2026-07-19 晚", task: "确认银行卡境外功能", description: "确认境外支付和ATM取现已开启；不要记录银行卡号、密码或CVV。", priority: "HIGH", completed: false },
+    { phase: "Phase 2 成都机场出发当天", time: "2026-07-20 07:00-07:30", task: "前往成都天府机场", description: "3U3995于09:40起飞；按提前2小时到达机场执行。", priority: "HIGH", completed: false },
+    { phase: "Phase 2 成都机场出发当天", time: "2026-07-20 到达机场后", task: "完成值机、托运和安检", description: "依次完成值机、托运行李和安检，并确认登机口。", priority: "HIGH", completed: false },
+    { phase: "Phase 2 成都机场出发当天", time: "2026-07-20 安检前", task: "检查随身包", description: "确认随身包内有护照、手机、充电宝、钱包和航班截图。", priority: "HIGH", completed: false },
+    { phase: "Phase 3 吉隆坡入境", time: "2026-07-20 14:20后", task: "完成吉隆坡入境流程", description: "下飞机后跟随Arrival / Immigration指示，完成马来西亚入境并取行李。", priority: "HIGH", completed: false },
+    { phase: "Phase 3 吉隆坡入境", time: "2026-07-20 取行李后", task: "连接网络并打开Grab", description: "连接手机网络，确认Grab可用。", priority: "HIGH", completed: false },
+    { phase: "Phase 3 吉隆坡入境", time: "2026-07-20 离开机场前", task: "执行机场安全提醒", description: "不要随便兑换大量现金，不乘坐陌生出租车。", priority: "HIGH", completed: false },
+    { phase: "Phase 4 吉隆坡入住", time: "2026-07-20 入境后", task: "Grab前往The RuMa Hotel", description: "从机场乘Grab前往The RuMa Hotel，预计45-60分钟，实际以路况为准。", priority: "HIGH", completed: false },
+    { phase: "Phase 4 吉隆坡入住", time: "2026-07-20 到店后", task: "完成The RuMa入住", description: "办理入住时确认护照、押金和WiFi。", priority: "HIGH", completed: false },
+    { phase: "Phase 4 吉隆坡入住", time: "2026-07-20 晚", task: "前往KLCC双子塔", description: "根据抵达体力执行首晚KLCC双子塔安排，不增加长距离移动。", priority: "MEDIUM", completed: false },
+    { phase: "Phase 5 7月21飞巴厘岛", time: "2026-07-21 15:00左右", task: "到达KUL机场", description: "OD157于17:55起飞，计划15:00左右抵达KUL机场。", priority: "HIGH", completed: false },
+    { phase: "Phase 5 7月21飞巴厘岛", time: "2026-07-21 值机前", task: "检查OD157登机资料", description: "确认护照、登机牌和行李额度。", priority: "HIGH", completed: false },
+    { phase: "Phase 6 巴厘岛落地", time: "2026-07-21 21:05后", task: "完成DPS入境和取行李", description: "抵达DPS后完成入境并取行李。", priority: "HIGH", completed: false },
+    { phase: "Phase 6 巴厘岛落地", time: "2026-07-21 取行李后", task: "开启网络并联系住宿", description: "开启手机网络，联系住宿并确认晚间入住方式；不在项目中保存私人联系方式。", priority: "HIGH", completed: false },
+    { phase: "Phase 6 巴厘岛落地", time: "2026-07-21 预计23:00", task: "Grab前往南登巴萨Airbnb", description: "乘Grab前往Airbnb，预计23:00左右入住，实际以入境和路况为准。", priority: "HIGH", completed: false },
+    { phase: "Phase 7 7月22出海前", time: "2026-07-21 晚", task: "准备出海随身包", description: "装好泳衣、防晒、墨镜、帽子、防水袋、晕船药和手机。", priority: "HIGH", completed: false },
+    { phase: "Phase 7 7月22出海前", time: "2026-07-21 晚", task: "确认出海执行信息", description: "确认船班时间、集合地点和接送司机。", priority: "HIGH", completed: false }
+  ],
+  departureCountdown: {
+    title: "出发倒计时",
+    date: "2026-07-19",
+    departureDate: "2026-07-20",
+    daysRemaining: 1,
+    todayFocusTasks: [
+      { order: 1, task: "MDAC", priority: "HIGH", completed: false },
+      { order: 2, task: "印尼入境资料", priority: "HIGH", completed: false },
+      { order: 3, task: "eSIM", priority: "HIGH", completed: false },
+      { order: 4, task: "出海确认", priority: "HIGH", completed: false }
+    ],
+    highestPriorityTasks: ["确认护照", "保存电子入境资料", "确认eSIM", "确认次日机场出发安排"]
+  },
   riskAlerts: [
     { id: "nusa-weather", date: "2026-07-22", severity: "high", title: "努沙佩尼达天气与海况", text: "天气和海况可能影响快船、浮潜及Manta Point安排；以当天安全判断为准。", status: "active" },
     { id: "separate-ticket-return", date: "2026-07-25", severity: "critical", title: "巴厘岛至吉隆坡非联程风险", text: "OD307与3U3994若不是联程票，前段延误不会受到后段航班保护。", status: "active" },
@@ -384,6 +424,10 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-19T20:58:27+08:00", version: "1.2.3", change: "Added final 24-hour departure checklist" },
+    { at: "2026-07-19T20:58:27+08:00", version: "1.2.3", change: "Added airport execution flow" },
+    { at: "2026-07-19T20:58:27+08:00", version: "1.2.3", change: "Added arrival procedure" },
+    { at: "2026-07-19T20:58:27+08:00", version: "1.2.3", change: "Added carry-on checklist" },
     { at: "2026-07-19T20:07:50+08:00", version: "1.2.2", change: "Improved travel readiness, cache updates and local image fallbacks" },
     { at: "2026-07-19T19:54:12+08:00", version: "1.2.1", change: "Added pre-departure checklist" },
     { at: "2026-07-19T19:54:12+08:00", version: "1.2.1", change: "Added immigration preparation" },
@@ -405,6 +449,25 @@ window.TRIP_DATA = {
 // ponytail: reuse the existing checklist UI and localStorage status handling instead of adding a second state system.
 {
   const data = window.TRIP_DATA;
+  const finalDueDates = {
+    "Phase 1 出发前晚上": "2026-07-19",
+    "Phase 2 成都机场出发当天": "2026-07-20",
+    "Phase 3 吉隆坡入境": "2026-07-20",
+    "Phase 4 吉隆坡入住": "2026-07-20",
+    "Phase 5 7月21飞巴厘岛": "2026-07-21",
+    "Phase 6 巴厘岛落地": "2026-07-21",
+    "Phase 7 7月22出海前": "2026-07-21"
+  };
+  const finalDepartureItems = data.finalDepartureChecklist.map((item, index) => ({
+    id: `final-departure-${index + 1}`,
+    title: item.task,
+    category: item.phase,
+    owner: "共同完成",
+    priority: item.priority,
+    dueDate: finalDueDates[item.phase],
+    completed: item.completed,
+    description: `${item.time} · ${item.description}`
+  }));
   const preparationItems = [
     ...data.preDepartureChecklist,
     ...data.connectivityChecklist,
@@ -412,7 +475,8 @@ window.TRIP_DATA = {
     ...data.boatTripChecklist.tasks,
     ...data.hotelPreparation,
     ...data.transportPreparation,
-    ...data.emergencyPreparation
+    ...data.emergencyPreparation,
+    ...finalDepartureItems
   ];
   const existingTaskIds = new Set(data.tasks.map((task) => task.id));
   data.tasks.push(...preparationItems.filter((item) => !existingTaskIds.has(item.id)).map((item) => ({
