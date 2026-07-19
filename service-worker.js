@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "malaysia-bali-dashboard-";
-const CACHE = `${CACHE_PREFIX}v1.4.1`;
+const CACHE = `${CACHE_PREFIX}v1.4.3`;
 const SHELL = [
   "./",
   "./index.html",

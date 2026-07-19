@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.4.1",
-    versionName: "Offline Pack + Travel Inbox Foundation",
-    versionLabel: "离线包与旅行收件箱基础版",
-    lastUpdated: "2026-07-20T00:30:00+08:00",
+    version: "1.4.3",
+    versionName: "Private-Public Bridge",
+    versionLabel: "私人资料公开状态桥接版",
+    lastUpdated: "2026-07-20T01:10:55+08:00",
     weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -30,10 +30,34 @@ window.TRIP_DATA = {
     visibility: "private-only",
     supportedTypes: ["pdf", "image"],
     acceptedMimeTypes: ["application/pdf", "image/jpeg", "image/png", "image/heic"],
-    entryFields: ["documentId", "type", "title", "status", "source", "createdAt"],
+    statuses: ["incoming", "processing", "verified", "archived"],
+    entryFields: ["documentId", "fileName", "fileType", "category", "status", "createdAt", "verifiedAt"],
+    workflow: ["incoming", "processing", "verified", "archived"],
     storageTarget: "private-layer",
     publicMetadataOnly: true,
+    githubUploadsAllowed: false,
     items: []
+  },
+  documentRegistry: {
+    visibility: "private-metadata-only",
+    source: "travelInbox",
+    supportedCategories: ["flight", "hotel", "immigration", "insurance", "transport", "receipt"],
+    resultFields: ["title", "provider", "date", "relatedTripItem", "status"],
+    items: []
+  },
+  documentReadiness: {
+    publicSummaryOnly: true,
+    categories: [
+      { id: "flights", label: "Flights", labelZh: "航班资料", readyCount: 4, totalCount: 4, status: "ready" },
+      { id: "hotels", label: "Hotels", labelZh: "酒店资料", readyCount: 5, totalCount: 5, status: "ready" },
+      { id: "immigration", label: "Immigration", labelZh: "入境资料", readyCount: 7, totalCount: 7, status: "ready" },
+      { id: "transport", label: "Transport", labelZh: "交通资料", readyCount: 0, totalCount: 0, status: "missing" }
+    ],
+    emergencyStatus: [
+      { id: "passport", label: "护照", status: "saved" },
+      { id: "visa", label: "签证", status: "saved" },
+      { id: "arrival", label: "入境", status: "saved" }
+    ]
   },
   travelers: [
     { id: "me", name: "我", role: "traveler" },
@@ -437,6 +461,12 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-20T01:10:55+08:00", version: "1.4.3", change: "Added public-safe document readiness summaries" },
+    { at: "2026-07-20T01:10:55+08:00", version: "1.4.3", change: "Added Private-Public Bridge status cards" },
+    { at: "2026-07-20T01:10:55+08:00", version: "1.4.3", change: "Added emergency document saved states without private metadata" },
+    { at: "2026-07-20T00:49:03+08:00", version: "1.4.2", change: "Added Document Import Assistant data flow" },
+    { at: "2026-07-20T00:49:03+08:00", version: "1.4.2", change: "Added Travel Inbox processing states and Document Registry schema" },
+    { at: "2026-07-20T00:49:03+08:00", version: "1.4.2", change: "Added mobile Inbox counters without file upload" },
     { at: "2026-07-20T00:30:00+08:00", version: "1.4.1", change: "Added privacy-safe Offline Pack" },
     { at: "2026-07-20T00:30:00+08:00", version: "1.4.1", change: "Added Travel Inbox index foundation" },
     { at: "2026-07-20T00:30:00+08:00", version: "1.4.1", change: "Added mobile-first Readiness Board" },

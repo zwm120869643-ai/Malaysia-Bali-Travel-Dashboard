@@ -75,6 +75,13 @@
     return { completed, total: items.length, percent: Math.round((completed / items.length) * 100) };
   }
 
+  function inboxCounts(items) {
+    return {
+      pending: items.filter((item) => item.status === "incoming" || item.status === "processing").length,
+      verified: items.filter((item) => item.status === "verified" || item.status === "archived").length
+    };
+  }
+
   function budgetTotals(items, overrides) {
     return items.reduce((totals, item) => {
       const local = overrides[item.id] || {};
@@ -92,5 +99,5 @@
     }, { planned: 0, actual: 0, paid: 0, unpaid: 0, me: 0, partner: 0 });
   }
 
-  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, budgetTotals };
+  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals };
 })(typeof window !== "undefined" ? window : globalThis);

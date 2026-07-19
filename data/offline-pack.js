@@ -7,7 +7,7 @@
 
   // ponytail: copy only the public fields needed when the network is unavailable.
   root.OFFLINE_PACK = Object.freeze({
-    version: "1.4.1",
+    version: "1.4.3",
     generatedAt: data.meta.lastUpdated,
     offlineReady: true,
     contents: ["flights", "hotels", "emergency", "itinerary", "checklist summary"],
