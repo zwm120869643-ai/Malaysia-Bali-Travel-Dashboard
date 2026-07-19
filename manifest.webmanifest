@@ -1,0 +1,20 @@
+{
+  "name": "Malaysia Bali Travel Dashboard",
+  "short_name": "Travel 2026",
+  "description": "马来西亚 × 巴厘岛情侣旅行总控台",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f1e7",
+  "theme_color": "#0d5c63",
+  "lang": "zh-CN",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

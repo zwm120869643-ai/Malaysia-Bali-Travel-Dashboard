@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">地图占位图</title><desc id="desc">地图定位标记的简洁图形</desc>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#17656c"/><stop offset="1" stop-color="#8bc3b8"/></linearGradient></defs>
+  <rect width="1200" height="675" fill="url(#g)"/><path d="M120 160l300-80 360 105 300-80v410l-300 80-360-105-300 80Z" fill="#fffdf8" opacity=".88"/><path d="M420 80v410M780 185v410" stroke="#76aaa8" stroke-width="18"/><path d="M600 165c-82 0-148 66-148 148 0 117 148 240 148 240s148-123 148-240c0-82-66-148-148-148Z" fill="#d97745"/><circle cx="600" cy="310" r="54" fill="#fffdf8"/>
+  <text x="1030" y="625" text-anchor="end" fill="#fff" font-family="system-ui,sans-serif" font-size="34" letter-spacing="7">MAP</text>
+</svg>

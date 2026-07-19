@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">酒店占位图</title><desc id="desc">简洁的度假酒店建筑图形</desc>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#214f54"/><stop offset="1" stop-color="#d49a70"/></linearGradient></defs>
+  <rect width="1200" height="675" fill="url(#g)"/><rect x="260" y="210" width="680" height="330" rx="24" fill="#fffdf8" opacity=".9"/><path d="M350 540V315h500v225M455 315v225M745 315v225" fill="none" stroke="#276d72" stroke-width="28"/><circle cx="600" cy="425" r="30" fill="#d97745"/>
+  <text x="600" y="610" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="38" letter-spacing="8">HOTEL</text>
+</svg>

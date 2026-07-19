@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">旅行封面占位图</title><desc id="desc">青绿色与日落橙色的抽象旅行背景</desc>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#145e65"/><stop offset=".55" stop-color="#78b5b2"/><stop offset="1" stop-color="#df8c5c"/></linearGradient></defs>
+  <rect width="1200" height="675" fill="url(#g)"/><circle cx="950" cy="170" r="92" fill="#ffe2b8" opacity=".8"/><path d="M0 470Q210 350 420 475T830 465T1200 455V675H0Z" fill="#164f55" opacity=".72"/>
+  <text x="70" y="590" fill="#fff" font-family="system-ui,sans-serif" font-size="42" letter-spacing="8">MALAYSIA × BALI</text>
+</svg>

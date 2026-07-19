@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="太阳与海浪旅行图标">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d5c63"/><stop offset="1" stop-color="#127b83"/></linearGradient></defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <circle cx="360" cy="160" r="64" fill="#f3a35c"/>
+  <path d="M72 294c58-42 111-42 169 0s111 42 199 0v54c-88 42-141 42-199 0S130 306 72 348zm0 92c58-42 111-42 169 0s111 42 199 0v54H72z" fill="#f6f1e7"/>
+</svg>

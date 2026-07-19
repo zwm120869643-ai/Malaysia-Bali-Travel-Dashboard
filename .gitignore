@@ -1,0 +1,26 @@
+.DS_Store
+node_modules/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+work/
+scratch/
+
+# Local deliverables and private travel material
+outputs/
+private/
+private-travel*/
+私密旅行资料/
+旅行私密资料/
+orders/
+qrcodes/
+*.pdf
+*.zip
+*.pkpass
+*.p12
+*.pem
+*.key

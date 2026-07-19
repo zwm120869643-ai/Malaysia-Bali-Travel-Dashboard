@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">餐饮占位图</title><desc id="desc">餐盘与餐具的简洁图形</desc>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a95634"/><stop offset="1" stop-color="#efbc79"/></linearGradient></defs>
+  <rect width="1200" height="675" fill="url(#g)"/><circle cx="600" cy="330" r="190" fill="#fffdf8" opacity=".92"/><circle cx="600" cy="330" r="110" fill="none" stroke="#d97745" stroke-width="22"/><path d="M330 180v310M285 180v125q45 50 90 0V180M880 180v310" fill="none" stroke="#fffdf8" stroke-width="22" stroke-linecap="round"/>
+  <text x="600" y="610" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="38" letter-spacing="8">FOOD</text>
+</svg>
