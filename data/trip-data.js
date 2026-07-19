@@ -9,11 +9,11 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.3.0",
-    versionName: "Shared Checklist Sync",
-    versionLabel: "情侣共享清单同步版",
-    lastUpdated: "2026-07-19T23:30:45+08:00",
-    weatherNote: "等待人工录入",
+    version: "1.4.1",
+    versionName: "Offline Pack + Travel Inbox Foundation",
+    versionLabel: "离线包与旅行收件箱基础版",
+    lastUpdated: "2026-07-20T00:30:00+08:00",
+    weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
   imageFallbacks: {
@@ -21,6 +21,19 @@ window.TRIP_DATA = {
     hotel: "assets/images/placeholder-hotel.svg",
     food: "assets/images/placeholder-food.svg",
     map: "assets/images/placeholder-map.svg"
+  },
+  weatherLocations: [
+    { id: "kuala-lumpur", name: "吉隆坡", latitude: 3.139, longitude: 101.6869, timezone: "Asia/Kuala_Lumpur", sea_condition: { status: "TBD", provider: "TBD" } },
+    { id: "bali", name: "巴厘岛", latitude: -8.65, longitude: 115.2167, timezone: "Asia/Makassar", sea_condition: { status: "TBD", provider: "TBD" } }
+  ],
+  travelInbox: {
+    visibility: "private-only",
+    supportedTypes: ["pdf", "image"],
+    acceptedMimeTypes: ["application/pdf", "image/jpeg", "image/png", "image/heic"],
+    entryFields: ["documentId", "type", "title", "status", "source", "createdAt"],
+    storageTarget: "private-layer",
+    publicMetadataOnly: true,
+    items: []
   },
   travelers: [
     { id: "me", name: "我", role: "traveler" },
@@ -424,6 +437,12 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-20T00:30:00+08:00", version: "1.4.1", change: "Added privacy-safe Offline Pack" },
+    { at: "2026-07-20T00:30:00+08:00", version: "1.4.1", change: "Added Travel Inbox index foundation" },
+    { at: "2026-07-20T00:30:00+08:00", version: "1.4.1", change: "Added mobile-first Readiness Board" },
+    { at: "2026-07-20T00:19:09+08:00", version: "1.4.0", change: "Added automatic destination weather data" },
+    { at: "2026-07-20T00:19:09+08:00", version: "1.4.0", change: "Added hotel and flight registries" },
+    { at: "2026-07-20T00:19:09+08:00", version: "1.4.0", change: "Added private-only Travel Inbox schema" },
     { at: "2026-07-19T23:30:45+08:00", version: "1.3.0", change: "Added Supabase shared checklist sync" },
     { at: "2026-07-19T23:30:45+08:00", version: "1.3.0", change: "Added cloud-first updates with localStorage fallback" },
     { at: "2026-07-19T23:30:45+08:00", version: "1.3.0", change: "Added syncing, synced and offline status" },
@@ -448,6 +467,29 @@ window.TRIP_DATA = {
     { at: "2026-07-19T20:00:00+08:00", version: "1.0.0", change: "创建可运行的旅行总控台基础数据；所有未知信息保留为TBD或pending。" }
   ]
 };
+
+// ponytail: registries derive from the existing confirmed records so the public data has one source of truth.
+{
+  const data = window.TRIP_DATA;
+  data.hotelRegistry = data.hotels.map((hotel) => ({
+    id: hotel.id,
+    hotel_name: hotel.name,
+    check_in: hotel.checkIn,
+    check_out: hotel.checkOut,
+    address: hotel.address,
+    check_time: "TBD",
+    breakfast: hotel.breakfast,
+    map_link: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.address)}`,
+    status: hotel.status
+  }));
+  data.flightRegistry = data.flights.map((flight) => ({
+    id: flight.id,
+    flight_number: flight.flightNumber,
+    departure: { date: flight.date, time: flight.departureTime, airport: flight.departureAirport, terminal: flight.departureTerminal },
+    arrival: { date: flight.date, time: flight.arrivalTime, airport: flight.arrivalAirport, terminal: flight.arrivalTerminal },
+    status: flight.status
+  }));
+}
 
 // ponytail: reuse the existing checklist UI and localStorage status handling instead of adding a second state system.
 {

@@ -2,6 +2,7 @@
   "use strict";
 
   const DATA = window.TRIP_DATA;
+  const OFFLINE_PACK = window.OFFLINE_PACK;
   const L = window.DashboardLogic;
   const STORAGE_KEY = "malaysia-bali-dashboard-overrides-v1";
   const SYNC_DEVICE_KEY = "malaysia-bali-sync-device-v1";
@@ -117,7 +118,11 @@
   const checklistSync = window.TravelChecklistSync
     ? window.TravelChecklistSync.create(window.TRAVEL_SYNC_CONFIG)
     : { configured: false, userName: "TBD", status: "offline", subscribe() {}, markOffline() {}, async push() { return false; }, async pull() { return null; } };
+  const weatherService = window.TravelWeather ? window.TravelWeather.create() : { async load() { return []; } };
   let state = storage.get();
+  let weatherByLocation = {};
+  let weatherLoading = true;
+  let weatherRun;
   let syncStatus = checklistSync.status;
   let checklistSyncRun;
   let checklistFilter = "all";
@@ -309,6 +314,46 @@
 
   const fallbackImage = (type) => DATA.imageFallbacks[type] || DATA.imageFallbacks.cover;
 
+  function weatherLocationIdForDay(day) {
+    return day.date <= "2026-07-21" ? "kuala-lumpur" : "bali";
+  }
+
+  function formatSunset(value) {
+    return value === "TBD" ? value : String(value).slice(11, 16) || "TBD";
+  }
+
+  function loadWeatherData() {
+    if (weatherRun) return weatherRun;
+    weatherLoading = true;
+    weatherRun = weatherService.load(DATA.weatherLocations).then((rows) => {
+      weatherByLocation = Object.fromEntries(rows.map((row) => [row.id, row]));
+      weatherLoading = false;
+      renderHome();
+    }).finally(() => { weatherRun = null; });
+    return weatherRun;
+  }
+
+  function readinessBoard() {
+    const taskStatus = (items) => !items.length ? "missing" : items.every((item) => state.completedTasks[item.id] ?? item.completed) ? "ready" : "pending";
+    const registryStatus = (items, localState) => !items.length ? "missing" : items.every((item) => (localState[item.id]?.status || item.status) === "confirmed") ? "ready" : "pending";
+    return [
+      { label: "Documents", status: taskStatus(DATA.preDepartureChecklist) },
+      { label: "Hotels", status: registryStatus(DATA.hotelRegistry, state.hotels) },
+      { label: "Flights", status: registryStatus(DATA.flightRegistry, state.flights) },
+      { label: "Network", status: taskStatus(DATA.connectivityChecklist) },
+      { label: "Activities", status: taskStatus(DATA.boatTripChecklist.tasks) }
+    ];
+  }
+
+  function weatherOverviewCard() {
+    const rows = DATA.weatherLocations.map((location) => {
+      const weather = weatherByLocation[location.id];
+      const value = weather ? `${weather.temperature}°C · 雨${weather.rainProbability}% · 日落${formatSunset(weather.sunset)}` : weatherLoading ? "获取中" : "TBD";
+      return `<div class="today-row"><span>${esc(location.name)}</span><strong>${esc(value)}</strong></div>`;
+    }).join("");
+    return `<article class="card"><p class="eyebrow">Weather</p><h3>目的地天气</h3><div class="today-list">${rows}<div class="today-row"><span>海况</span><strong>TBD</strong></div></div></article>`;
+  }
+
   function renderHome() {
     const trip = L.tripMoment(DATA.meta);
     const current = L.currentItinerary(DATA.itinerary);
@@ -324,7 +369,12 @@
       highPriorityRemaining: readiness.filter((item) => item.priority === "HIGH" && !(state.completedTasks[item.id] ?? item.completed)).length
     };
     const todayHotel = DATA.hotels.find((hotel) => hotel.checkIn <= focusDay.date && hotel.checkOut > focusDay.date);
+    const todayFlight = DATA.flights.find((flight) => flight.date === focusDay.date) || DATA.flights.find((flight) => flight.date > focusDay.date);
     const todayTasks = DATA.tasks.filter((task) => task.dueAt === focusDay.date && !(state.completedTasks[task.id] ?? task.completed));
+    const focusWeather = weatherByLocation[weatherLocationIdForDay(focusDay)];
+    const focusWeatherLabel = focusWeather ? `${focusWeather.temperature}°C · 降雨${focusWeather.rainProbability}%` : weatherLoading ? "正在获取" : "TBD";
+    const emergencyContact = weatherLocationIdForDay(focusDay) === "kuala-lumpur" ? DATA.emergency.find((item) => item.id === "malaysia-emergency") : DATA.emergency.find((item) => item.id === "indonesia-police");
+    const board = readinessBoard();
     const phaseLabel = trip.phase === "upcoming" ? "即将出发" : trip.phase === "traveling" ? "旅行进行中" : "旅行已结束";
 
     $("#view-home").innerHTML = `
@@ -346,18 +396,10 @@
         </div>
       </article>
 
-      <div class="section-head"><div><p class="eyebrow">Today at a glance</p><h2>${trip.phase === "traveling" ? "今日总览" : "下一站总览"}</h2></div><p>${esc(L.formatDate(focusDay.date))}</p></div>
+      <div class="section-head"><div><p class="eyebrow">Mobile travel actions</p><h2>${trip.phase === "traveling" ? "今日总览" : "下一站总览"}</h2></div><p>${esc(L.formatDate(focusDay.date))}</p></div>
       <div class="grid home-grid">
-        <article class="card readiness-card">
-          <p class="eyebrow">Travel ready</p><h3>出发准备</h3>
-          <div class="today-list">
-            <div class="today-row"><span>距离出发</span><strong>${esc(departureStatus.daysRemaining)}天</strong></div>
-            <div class="today-row"><span>完成</span><strong>${esc(departureStatus.completionRate)}%</strong></div>
-            <div class="today-row"><span>剩余重要任务</span><strong>${esc(departureStatus.highPriorityRemaining)}项</strong></div>
-          </div>
-        </article>
         <article class="card today-card">
-          <div class="today-top"><div><p class="eyebrow">${trip.phase === "traveling" ? "Now" : "First day"}</p><h3 class="today-city">${esc(focusDay.city)}</h3></div><div class="weather">天气<br><strong>${esc(focusDay.weather)}</strong></div></div>
+          <div class="today-top"><div><p class="eyebrow">${trip.phase === "traveling" ? "Now" : "First day"}</p><h3 class="today-city">${esc(focusDay.city)}</h3></div><div class="weather">天气<br><strong>${esc(focusWeatherLabel)}</strong></div></div>
           <div class="today-list">
             <div class="today-row"><span>住宿</span><strong>${esc(todayHotel ? todayHotel.nameZh : "等待确认")}</strong></div>
             <div class="today-row"><span>交通</span><strong>${esc(focusDay.transport)}</strong></div>
@@ -365,9 +407,24 @@
             <div class="today-row"><span>必须完成</span><strong>${esc(todayTasks[0]?.title || state.notes.today || "暂无当天待办")}</strong></div>
           </div>
         </article>
+        ${weatherOverviewCard()}
+        <article class="card"><p class="eyebrow">Flight</p><h3>${esc(todayFlight?.flightNumber || "TBD")}</h3><div class="today-list"><div class="today-row"><span>出发</span><strong>${esc(todayFlight ? `${todayFlight.departureTime} · ${todayFlight.departureAirport}` : "TBD")}</strong></div><div class="today-row"><span>抵达</span><strong>${esc(todayFlight ? `${todayFlight.arrivalTime} · ${todayFlight.arrivalAirport}` : "TBD")}</strong></div><div class="today-row"><span>状态</span><strong>${esc(todayFlight?.status || "missing")}</strong></div></div></article>
+        <article class="card"><p class="eyebrow">Hotel</p><h3>${esc(todayHotel?.nameZh || "住宿待确认")}</h3><div class="today-list"><div class="today-row"><span>入住</span><strong>${esc(todayHotel?.checkIn || "TBD")}</strong></div><div class="today-row"><span>退房</span><strong>${esc(todayHotel?.checkOut || "TBD")}</strong></div><div class="today-row"><span>状态</span><strong>${esc(todayHotel?.status || "missing")}</strong></div></div></article>
+        <article class="card readiness-card"><p class="eyebrow">Checklist</p><h3>旅行清单</h3><div class="today-list"><div class="today-row"><span>完成</span><strong>${esc(departureStatus.completionRate)}%</strong></div><div class="today-row"><span>重要待办</span><strong>${esc(departureStatus.highPriorityRemaining)}项</strong></div><div class="today-row"><span>离线摘要</span><strong>${esc(OFFLINE_PACK.checklistSummary.total)}项</strong></div></div></article>
+        <article class="card"><p class="eyebrow">Inbox</p><h3>Travel Inbox</h3><div class="today-list"><div class="today-row"><span>索引</span><strong>${esc(DATA.travelInbox.items.length)}项</strong></div><div class="today-row"><span>支持</span><strong>PDF · 图片</strong></div><div class="today-row"><span>存储</span><strong>私人层</strong></div></div></article>
+        <article class="card"><p class="eyebrow">Emergency</p><h3>${esc(emergencyContact?.label || "紧急信息")}</h3><div class="today-list"><div class="today-row"><span>地区</span><strong>${esc(emergencyContact?.region || "TBD")}</strong></div><div class="today-row"><span>电话</span><strong>${esc(emergencyContact?.phone || "TBD")}</strong></div><div class="today-row"><span>离线</span><strong>可用</strong></div></div></article>
+      </div>
 
+      <div class="section-head"><div><p class="eyebrow">Readiness board</p><h2>旅行准备状态</h2></div></div>
+      <div class="grid home-grid">
+        <article class="card"><p class="eyebrow">Status</p><h3>准备分类</h3><div class="today-list">${board.map((item) => `<div class="today-row"><span>${esc(item.label)}</span><strong>${esc(item.status)}</strong></div>`).join("")}</div></article>
+        <article class="card"><p class="eyebrow">Offline pack</p><h3>离线包状态</h3><div class="today-list"><div class="today-row"><span>最后同步</span><strong>${esc(formatUpdated(OFFLINE_PACK.generatedAt))}</strong></div><div class="today-row"><span>包含</span><strong>航班 · 酒店 · 紧急信息 · 行程 · 清单摘要</strong></div><div class="today-row"><span>离线可用</span><strong>${OFFLINE_PACK.offlineReady ? "ready" : "missing"}</strong></div></div></article>
+      </div>
+
+      <div class="section-head"><div><p class="eyebrow">Next actions</p><h2>下一步行动</h2></div></div>
+      <div class="grid home-grid">
         <article class="card">
-          <p class="eyebrow">Next actions</p><h3>下一步行动</h3>
+          <p class="eyebrow">Checklist focus</p><h3>优先任务</h3>
           <div class="task-list">${urgent.length ? urgent.map((task, index) => `
             <div class="task-line"><span class="task-index">${index + 1}</span><div><strong>${esc(task.title)}</strong><small>${esc(task.assignee)} · ${esc(L.formatDate(task.dueAt, { month: "numeric", day: "numeric" }))}前</small></div>${statusTag("pending")}</div>
           `).join("") : '<p class="empty">紧急事项已完成</p>'}</div>
@@ -731,7 +788,10 @@
     const banner = $("#offline-banner");
     const update = () => {
       banner.hidden = navigator.onLine;
-      if (navigator.onLine) syncChecklistFromCloud(); else checklistSync.markOffline();
+      if (navigator.onLine) {
+        syncChecklistFromCloud();
+        if (!Object.keys(weatherByLocation).length) loadWeatherData();
+      } else checklistSync.markOffline();
     };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
