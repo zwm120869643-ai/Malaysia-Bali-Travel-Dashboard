@@ -4,6 +4,7 @@
   const DATA = window.TRIP_DATA;
   const L = window.DashboardLogic;
   const STORAGE_KEY = "malaysia-bali-dashboard-overrides-v1";
+  const SYNC_DEVICE_KEY = "malaysia-bali-sync-device-v1";
   const ASSIGNEES = ["我", "女朋友", "共同完成"];
   const STATUSES = ["pending", "confirmed", "changed", "cancelled"];
   const ACTUAL_FLIGHT_STATUSES = ["等待确认", "正常", "延误", "取消", "已完成"];
@@ -12,7 +13,10 @@
   const emptyState = () => ({
     baseVersion: DATA.meta.version,
     updatedAt: null,
+    lastSyncedAt: null,
+    syncUserName: "",
     completedTasks: {},
+    pendingChecklistSync: {},
     assignees: {},
     budget: {},
     flights: {},
@@ -29,10 +33,21 @@
     if (!isRecord(raw)) return clean;
     if (typeof raw.baseVersion === "string") clean.baseVersion = raw.baseVersion.slice(0, 30);
     if (typeof raw.updatedAt === "string") clean.updatedAt = raw.updatedAt.slice(0, 40);
+    if (typeof raw.lastSyncedAt === "string") clean.lastSyncedAt = raw.lastSyncedAt.slice(0, 40);
+    if (typeof raw.syncUserName === "string") clean.syncUserName = raw.syncUserName.trim().slice(0, 64);
 
     const checklistIds = new Set(allChecklistItems().map((item) => item.id));
     if (isRecord(raw.completedTasks)) Object.entries(raw.completedTasks).forEach(([id, value]) => {
       if (checklistIds.has(id) && typeof value === "boolean") clean.completedTasks[id] = value;
+    });
+    if (isRecord(raw.pendingChecklistSync)) Object.entries(raw.pendingChecklistSync).forEach(([id, value]) => {
+      if (!checklistIds.has(id) || !isRecord(value) || typeof value.completed !== "boolean" || typeof value.taskName !== "string") return;
+      clean.pendingChecklistSync[id] = {
+        taskId: id,
+        taskName: value.taskName.slice(0, 160),
+        completed: value.completed,
+        completedBy: typeof value.completedBy === "string" ? value.completedBy.slice(0, 64) : "shared-device"
+      };
     });
     if (isRecord(raw.assignees)) Object.entries(raw.assignees).forEach(([id, value]) => {
       if (checklistIds.has(id) && ASSIGNEES.includes(value)) clean.assignees[id] = value;
@@ -66,7 +81,7 @@
     return clean;
   }
 
-  // ponytail: one storage boundary is enough; replace this object for future cloud sync.
+  // ponytail: localStorage stays the durable fallback; only checklist state leaves this boundary.
   const storage = {
     get() {
       try {
@@ -99,7 +114,12 @@
     }
   };
 
+  const checklistSync = window.TravelChecklistSync
+    ? window.TravelChecklistSync.create(window.TRAVEL_SYNC_CONFIG)
+    : { configured: false, userName: "TBD", status: "offline", subscribe() {}, markOffline() {}, async push() { return false; }, async pull() { return null; } };
   let state = storage.get();
+  let syncStatus = checklistSync.status;
+  let checklistSyncRun;
   let checklistFilter = "all";
   let importMode = "all";
   let toastTimer;
@@ -125,6 +145,22 @@
     if (!storage.set(state)) showToast("浏览器未允许本机保存；请使用本地服务器打开");
   }
 
+  function syncStatusLabel() {
+    if (syncStatus === "syncing") return "同步中";
+    if (syncStatus === "synced") return state.lastSyncedAt ? `已同步 · ${formatSyncTime(state.lastSyncedAt)}` : "已同步";
+    return state.lastSyncedAt ? `离线模式 · 上次 ${formatSyncTime(state.lastSyncedAt)}` : "离线模式";
+  }
+
+  function updateSyncStatus(status) {
+    syncStatus = status;
+    const indicator = $("#sync-status");
+    if (indicator) indicator.textContent = syncStatusLabel();
+    const detail = $("#sync-status-detail");
+    if (detail) detail.textContent = syncStatusLabel();
+    const lastSynced = $("#last-synced-time");
+    if (lastSynced) lastSynced.textContent = formatLastSynced(state.lastSyncedAt);
+  }
+
   function download(name, content) {
     const blob = new Blob([content], { type: "application/json" });
     const anchor = document.createElement("a");
@@ -138,6 +174,15 @@
     if (!value) return "尚无本地修改";
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? "时间未知" : new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
+  }
+
+  function formatSyncTime(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "时间未知" : new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(date);
+  }
+
+  function formatLastSynced(value) {
+    return value ? formatUpdated(value) : "尚未完成云同步";
   }
 
   function allChecklistItems() {
@@ -164,6 +209,102 @@
       ...DATA.transportPreparation,
       ...DATA.emergencyPreparation
     ];
+  }
+
+  function syncDeviceId() {
+    try {
+      let value = localStorage.getItem(SYNC_DEVICE_KEY);
+      if (!value) {
+        const suffix = globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10);
+        value = `device-${suffix}`;
+        localStorage.setItem(SYNC_DEVICE_KEY, value);
+      }
+      return value.slice(0, 64);
+    } catch (_) {
+      return "shared-device";
+    }
+  }
+
+  function currentSyncUserName() {
+    const configuredName = checklistSync.userName && checklistSync.userName !== "TBD" ? checklistSync.userName : "";
+    return state.syncUserName || configuredName || syncDeviceId();
+  }
+
+  function checklistPayload(taskId, completed) {
+    const item = allChecklistItems().find((candidate) => candidate.id === taskId);
+    if (!item) return null;
+    return { taskId, taskName: item.title, completed, completedBy: currentSyncUserName() };
+  }
+
+  function queueChecklistChanges(changes) {
+    changes.filter(Boolean).forEach((change) => { state.pendingChecklistSync[change.taskId] = change; });
+  }
+
+  function commitChecklistChanges(changes, synced) {
+    changes.filter(Boolean).forEach((change) => {
+      state.completedTasks[change.taskId] = change.completed;
+      if (synced) delete state.pendingChecklistSync[change.taskId];
+    });
+    if (synced) state.lastSyncedAt = new Date().toISOString();
+    if (!synced) queueChecklistChanges(changes);
+    save();
+    renderHome();
+    renderChecklist();
+    renderMore();
+  }
+
+  async function updateChecklistTask(taskId, completed) {
+    const change = checklistPayload(taskId, completed);
+    if (!change) return;
+    const synced = await checklistSync.push(change);
+    commitChecklistChanges([change], synced);
+    showToast(synced ? "清单已同步" : "已保存在本机 · 离线模式");
+  }
+
+  async function clearChecklist() {
+    const changes = allChecklistItems().map((item) => checklistPayload(item.id, false));
+    const synced = await checklistSync.push(changes);
+    commitChecklistChanges(changes, synced);
+    showToast(synced ? "完成状态已清除并同步" : "完成状态已在本机清除");
+  }
+
+  function syncChecklistFromCloud() {
+    if (!checklistSync.configured || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      checklistSync.markOffline();
+      return Promise.resolve();
+    }
+    if (checklistSyncRun) return checklistSyncRun;
+    checklistSyncRun = (async () => {
+      const pending = Object.values(state.pendingChecklistSync);
+      if (pending.length) {
+        const flushed = await checklistSync.push(pending);
+        if (!flushed) return;
+        pending.forEach((change) => delete state.pendingChecklistSync[change.taskId]);
+      }
+
+      const rows = await checklistSync.pull();
+      if (rows === null) return;
+      const checklistIds = new Set(allChecklistItems().map((item) => item.id));
+      rows.forEach((row) => {
+        if (checklistIds.has(row.task_id)) state.completedTasks[row.task_id] = row.completed;
+      });
+
+      if (!rows.length) {
+        const initial = Object.entries(state.completedTasks).map(([taskId, completed]) => checklistPayload(taskId, completed)).filter(Boolean);
+        if (initial.length && !(await checklistSync.push(initial))) {
+          queueChecklistChanges(initial);
+          save();
+          return;
+        }
+      }
+
+      state.lastSyncedAt = new Date().toISOString();
+      save();
+      renderHome();
+      renderChecklist();
+      renderMore();
+    })().finally(() => { checklistSyncRun = null; });
+    return checklistSyncRun;
   }
 
   const fallbackImage = (type) => DATA.imageFallbacks[type] || DATA.imageFallbacks.cover;
@@ -196,6 +337,7 @@
             <span class="glass-chip">♡ 两人情侣旅行</span>
             <span class="glass-chip">${esc(L.formatDate(DATA.meta.startDate, { year: "numeric", month: "long", day: "numeric" }))} — ${esc(L.formatDate(DATA.meta.endDate, { month: "long", day: "numeric" }))}</span>
             <span class="glass-chip">${phaseLabel}</span>
+            <span class="glass-chip" id="sync-status" role="status" aria-live="polite">${esc(syncStatusLabel())}</span>
           </div>
           <div class="hero-status">
             <div class="countdown"><strong>${esc(trip.label)}</strong><small>${trip.phase === "traveling" && current ? `${esc(current.city)} · ${esc(current.theme)}` : "成都出发 · 轻松海岛假期"}</small></div>
@@ -349,7 +491,7 @@
     const progress = L.checklistProgress(items, state.completedTasks);
     const categories = [...new Set(items.map((item) => item.category))];
     $("#view-checklist").innerHTML = `
-      <header class="page-header"><p class="eyebrow">Ready together</p><h1>准备清单</h1><p>勾选、负责人和完成进度只保存在这台设备；刷新后不会丢失。</p>
+      <header class="page-header"><p class="eyebrow">Ready together</p><h1>准备清单</h1><p>勾选状态优先同步云端；离线时继续保存在本机，恢复网络后自动重试。</p>
         <div class="header-actions"><button class="button ${checklistFilter === "open" ? "primary" : ""}" type="button" id="filter-open">${checklistFilter === "open" ? "显示全部" : "只看未完成"}</button><button class="button" type="button" id="export-checklist">导出清单</button><button class="button" type="button" id="import-checklist">导入清单</button><button class="button danger" type="button" id="clear-checklist">清除完成状态</button></div>
       </header>
       <article class="card progress-card"><div class="progress-top"><div><p class="eyebrow">Progress</p><strong>${progress.completed} / ${progress.total}</strong></div><span class="progress-value">${progress.percent}%</span></div><div class="progress-track" aria-label="清单完成${progress.percent}%"><span style="width:${progress.percent}%"></span></div></article>
@@ -430,6 +572,7 @@
         <article class="card wide"><p class="eyebrow">Gallery</p><h3>旅行图片</h3><div class="gallery">${DATA.gallery.map((image) => `<figure class="gallery-item"><img src="${esc(image.src)}" alt="${esc(image.alt)}" loading="lazy" onerror="this.onerror=null;this.src='${esc(fallbackImage("cover"))}'"><span>${esc(image.label)}</span></figure>`).join("")}</div></article>
         <article class="card"><p class="eyebrow">Emergency</p><h3>紧急联系</h3><div class="emergency-list">${DATA.emergency.map((contact) => `<div class="contact-row"><div><strong>${esc(contact.label)}</strong><span>${esc(contact.region)} · ${esc(contact.notes)}</span></div>${contact.phone === "TBD" ? '<b class="muted">TBD</b>' : `<a href="tel:${esc(contact.phone)}">${esc(contact.phone)}</a>`}</div>`).join("")}</div></article>
         <article class="card"><p class="eyebrow">Local notes</p><h3>本机备注</h3><label class="field">今日提醒<textarea id="today-note" maxlength="500" placeholder="只保存在本机，不要填写证件号或银行卡信息">${esc(state.notes.today)}</textarea></label><label class="field" style="margin-top:10px">临时备注<textarea id="temporary-note" maxlength="1000" placeholder="记录临时变更；不要填写敏感信息">${esc(state.notes.temporary)}</textarea></label><button class="button primary" type="button" id="save-notes" style="margin-top:10px">保存备注</button></article>
+        <article class="card"><p class="eyebrow">Shared checklist</p><h3>共享身份与同步</h3><label class="field">这台手机的显示名称<input id="sync-user-name" maxlength="64" value="${esc(state.syncUserName || (checklistSync.userName === "TBD" ? "" : checklistSync.userName))}" placeholder="例如：张微明"></label><button class="button primary" type="button" id="save-sync-user" style="margin-top:10px">保存显示名称</button><p class="card-subtitle"><span id="sync-status-detail">${esc(syncStatusLabel())}</span><br>最后同步：<span id="last-synced-time">${esc(formatLastSynced(state.lastSyncedAt))}</span><br>仅 completed、completed_by、updated_at 进入云端。</p></article>
         <article class="card"><p class="eyebrow">Flight status</p><h3>航班实际状态</h3><div class="edit-list">${DATA.flights.map((flight) => { const local = state.flights[flight.id] || {}; return `<label class="edit-item"><strong>${esc(flight.flightNumber)} · ${esc(flight.date)}</strong><select class="field" data-flight="${esc(flight.id)}" data-field="actualStatus">${ACTUAL_FLIGHT_STATUSES.map((value) => `<option ${value === (local.actualStatus || flight.actualStatus) ? "selected" : ""}>${esc(value)}</option>`).join("")}</select><select class="field" style="margin-top:7px" data-flight="${esc(flight.id)}" data-field="status">${STATUSES.map((value) => `<option value="${value}" ${value === (local.status || flight.status) ? "selected" : ""}>${esc(labels[value])}</option>`).join("")}</select></label>`; }).join("")}</div></article>
         <article class="card"><p class="eyebrow">Hotel status</p><h3>酒店确认状态</h3><div class="edit-list">${DATA.hotels.map((hotel) => { const local = state.hotels[hotel.id] || {}; return `<label class="edit-item"><strong>${esc(hotel.nameZh)}</strong><select class="field" data-hotel="${esc(hotel.id)}" data-field="status">${STATUSES.map((value) => `<option value="${value}" ${value === (local.status || hotel.status) ? "selected" : ""}>${esc(labels[value])}</option>`).join("")}</select></label>`; }).join("")}</div></article>
         <article class="card"><p class="eyebrow">Local data</p><h3>本机修改数据</h3><p class="card-subtitle">基础版本：${esc(DATA.meta.version)}<br>本机修改：${esc(formatUpdated(state.updatedAt))}</p><div class="card-actions"><button class="button small" type="button" id="export-all">导出JSON</button><button class="button small" type="button" id="import-all">从JSON导入</button><button class="button small danger" type="button" id="reset-all">恢复基础数据</button></div></article>
@@ -470,10 +613,11 @@
     if (copy) return copyText(copy.dataset.copy);
     if (event.target.id === "jump-today") return $(".day-card.today")?.scrollIntoView({ behavior: "smooth", block: "start" });
     if (event.target.id === "filter-open") { checklistFilter = checklistFilter === "open" ? "all" : "open"; renderChecklist(); return; }
-    if (event.target.id === "clear-checklist") { state.completedTasks = {}; save(); renderHome(); renderChecklist(); showToast("完成状态已清除"); return; }
+    if (event.target.id === "clear-checklist") return clearChecklist();
     if (event.target.id === "export-checklist") return exportChecklist();
     if (event.target.id === "import-checklist") return chooseImport("checklist");
     if (event.target.id === "save-notes") return saveNotes();
+    if (event.target.id === "save-sync-user") return saveSyncUserName();
     if (event.target.id === "export-all") { download("malaysia-bali-local-overrides.json", storage.export()); showToast("本机修改已导出"); return; }
     if (event.target.id === "import-all") return chooseImport("all");
     if (event.target.id === "reset-all") return resetAll();
@@ -481,7 +625,7 @@
 
   function handleChange(event) {
     const task = event.target.dataset.task;
-    if (task) { state.completedTasks[task] = event.target.checked; save(); renderHome(); renderChecklist(); return; }
+    if (task) { event.target.disabled = true; updateChecklistTask(task, event.target.checked); return; }
     const assignee = event.target.dataset.assignee;
     if (assignee) { state.assignees[assignee] = event.target.value; save(); showToast("负责人已更新"); return; }
     const budget = event.target.dataset.budget;
@@ -527,6 +671,16 @@
     showToast("备注已保存在本机");
   }
 
+  function saveSyncUserName() {
+    const value = $("#sync-user-name").value.trim().slice(0, 64);
+    if (/(护照号|身份证号|银行卡号|订单号|CVV|密码)/i.test(value)) return showToast("显示名称不能包含敏感信息");
+    state.syncUserName = value;
+    Object.values(state.pendingChecklistSync).forEach((change) => { change.completedBy = currentSyncUserName(); });
+    save();
+    renderMore();
+    showToast(value ? "共享显示名称已保存在本机" : "已恢复设备默认身份");
+  }
+
   function exportChecklist() {
     const payload = { type: "malaysia-bali-checklist", version: 1, exportedAt: new Date().toISOString(), completedTasks: state.completedTasks, assignees: state.assignees };
     download("malaysia-bali-checklist.json", JSON.stringify(payload, null, 2));
@@ -554,9 +708,12 @@
       } else {
         state = storage.import(data);
       }
+      queueChecklistChanges(allChecklistItems().map((item) => checklistPayload(item.id, state.completedTasks[item.id] ?? item.completed)));
+      save();
       renderAll();
       switchView(importMode === "checklist" ? "checklist" : "more", false);
       showToast("数据导入成功");
+      syncChecklistFromCloud();
     } catch (error) {
       showToast(error.message || "导入失败");
     }
@@ -572,7 +729,10 @@
 
   function setupNetwork() {
     const banner = $("#offline-banner");
-    const update = () => { banner.hidden = navigator.onLine; };
+    const update = () => {
+      banner.hidden = navigator.onLine;
+      if (navigator.onLine) syncChecklistFromCloud(); else checklistSync.markOffline();
+    };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     update();
@@ -597,6 +757,7 @@
 
   function init() {
     if (!DATA || !L) throw new Error("旅行数据或页面逻辑未加载");
+    checklistSync.subscribe(updateSyncStatus);
     renderAll();
     document.addEventListener("click", handleClick);
     document.addEventListener("change", handleChange);

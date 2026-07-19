@@ -1,6 +1,6 @@
 # Malaysia Bali Travel Dashboard
 
-《马来西亚 × 巴厘岛情侣旅行总控台》是一个面向 iPhone 的原生 PWA。无需构建、无需后端、无需 API Key；旅行数据集中在 `data/trip-data.js`，勾选与手机临时修改保存在当前浏览器的 `localStorage`。
+《马来西亚 × 巴厘岛情侣旅行总控台》是一个面向 iPhone 的原生 PWA。无需构建；旅行数据集中在 `data/trip-data.js`，本机修改保存在 `localStorage`。可选的 Supabase 层只同步清单完成状态，未配置时自动保持离线模式。
 
 ## 本地使用
 
@@ -115,9 +115,18 @@ GitHub Pages 可能是公开网页。绝对不要提交：
 - 全部预算金额和参考汇率
 - 旅行保险紧急援助联系方式
 
-## 两台手机实时同步（下一阶段）
+## Supabase 共享清单
 
-第一版保持本机离线。需要实时同步时，将 `js/app.js` 中的 `storage` 对象替换为 Supabase 或 Firebase 适配层，保留同样的 `get / set / export / import / reset` 接口即可。建议增加情侣共享登录、行级访问控制、传输加密和冲突时间戳；不要同步证件照片、银行卡信息或完整订单 PDF。
+Phase 1 只同步清单字段，不上传航班、酒店、费用、备注、证件或订单资料：
+
+1. 在 Supabase 创建项目。
+2. 打开 SQL Editor，执行 [`supabase/travel_checklist.sql`](supabase/travel_checklist.sql)。
+3. 在 Project Settings / API Keys 复制浏览器可用的 Publishable key；旧项目也可使用 anon key。
+4. 参考 [`config/sync-config.example.js`](config/sync-config.example.js) 编辑 [`config/sync-config.js`](config/sync-config.js)：填写项目 URL、Publishable key，并将 `enabled` 改为 `true`。
+5. `tripId` 保持 `malaysia-bali-2026`。`userName` 可保持 `TBD`，再分别从两台手机的“更多工具 → 共享身份与同步”保存各自显示名称；该覆盖值只保存在对应手机。
+6. 重新部署 GitHub Pages。两台手机打开同一地址，首页应依次显示“同步中”和“已同步 · 时间”。
+
+Publishable/anon key 会出现在公开网页中，这是浏览器端应用的正常行为；安全边界由 RLS 控制。绝对不要填写 Supabase secret 或 service_role key。当前 Phase 1 的匿名策略只适合非敏感 Checklist，任何人只要能访问公开站点及配置就可能修改状态；需要严格的情侣身份隔离时，应在下一阶段增加 Supabase Auth。
 
 ## 检查
 
@@ -125,6 +134,7 @@ GitHub Pages 可能是公开网页。绝对不要提交：
 
 ```bash
 node tests/dashboard.test.js
+node tests/sync.test.js
 ```
 
 PWA 离线检查需通过本地服务器或 HTTPS 地址完成。

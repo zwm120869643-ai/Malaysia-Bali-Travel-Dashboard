@@ -1,12 +1,14 @@
 const CACHE_PREFIX = "malaysia-bali-dashboard-";
-const CACHE = `${CACHE_PREFIX}v1.2.3`;
+const CACHE = `${CACHE_PREFIX}v1.3.0`;
 const SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./manifest.webmanifest",
   "./data/trip-data.js",
+  "./config/sync-config.js",
   "./js/logic.js",
+  "./js/sync.js",
   "./js/app.js",
   "./assets/images/placeholder-cover.svg",
   "./assets/images/placeholder-hotel.svg",

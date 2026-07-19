@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.2.3",
-    versionName: "Final Departure Checklist",
-    versionLabel: "出发前24小时最终检查版",
-    lastUpdated: "2026-07-19T20:58:27+08:00",
+    version: "1.3.0",
+    versionName: "Shared Checklist Sync",
+    versionLabel: "情侣共享清单同步版",
+    lastUpdated: "2026-07-19T23:30:45+08:00",
     weatherNote: "等待人工录入",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -424,6 +424,9 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-19T23:30:45+08:00", version: "1.3.0", change: "Added Supabase shared checklist sync" },
+    { at: "2026-07-19T23:30:45+08:00", version: "1.3.0", change: "Added cloud-first updates with localStorage fallback" },
+    { at: "2026-07-19T23:30:45+08:00", version: "1.3.0", change: "Added syncing, synced and offline status" },
     { at: "2026-07-19T20:58:27+08:00", version: "1.2.3", change: "Added final 24-hour departure checklist" },
     { at: "2026-07-19T20:58:27+08:00", version: "1.2.3", change: "Added airport execution flow" },
     { at: "2026-07-19T20:58:27+08:00", version: "1.2.3", change: "Added arrival procedure" },
