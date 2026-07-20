@@ -10,6 +10,11 @@
   const ASSIGNEES = ["我", "女朋友", "共同完成"];
   const STATUSES = ["pending", "confirmed", "changed", "cancelled"];
   const ACTUAL_FLIGHT_STATUSES = ["等待确认", "正常", "延误", "取消", "已完成"];
+  const ITINERARY_PERIODS = [["morning", "上午"], ["noon", "中午"], ["afternoon", "下午"], ["evening", "晚上"]];
+  const EXPENSE_CATEGORIES = { flight: "机票", hotel: "酒店", transport: "交通", food: "餐饮", sea: "出海", attractions: "景点", insurance: "保险", connectivity: "通信", shopping: "购物", other: "其他" };
+  const EXPENSE_STATUSES = { paid: "已支付", pending: "待支付", refunded: "已退款" };
+  const EXPENSE_SPLITS = { shared: "共同费用", personal: "个人费用" };
+  const EXPENSE_CURRENCIES = ["CNY", "MYR", "IDR", "USD"];
   const labels = { pending: "待确认", confirmed: "已确认", changed: "有变更", cancelled: "已取消", high: "高", medium: "中", low: "低" };
 
   const emptyState = () => ({
@@ -147,6 +152,9 @@
   const documentService = window.TravelDocuments
     ? window.TravelDocuments.create(window.TRAVEL_SYNC_CONFIG)
     : { configured: false, authenticated: false, hasSession: false, categories: [], canDelete() { return false; }, onInvalid() {}, clearSignedUrls() {}, async reset() {}, async getSession() { return null; }, async signIn() { throw new Error("私人资料服务未加载"); }, async list() { return []; }, async upload() { throw new Error("私人资料服务未加载"); }, async signedUrl() { throw new Error("私人资料服务未加载"); }, async remove() { return false; } };
+  const sharedDataService = window.TravelSharedData
+    ? window.TravelSharedData.create(window.TRAVEL_SYNC_CONFIG, documentService)
+    : { configured: false, async loadSnapshot() { return null; }, async refresh() { return null; }, async saveItineraryOverride() { const error = new Error("请先登录私人旅行数据"); error.code = "AUTH_REQUIRED"; throw error; } };
   let state = storage.get();
   let weatherByLocation = {};
   let weatherLoading = true;
@@ -157,6 +165,19 @@
   let privateRequestVersion = 0;
   let privateSessionChecking = false;
   let privateSessionRun;
+  let sharedSnapshot = null;
+  let sharedDataRun;
+  let sharedRequestVersion = 0;
+  let sharedDataLoading = false;
+  let itineraryEdit = null;
+  let itinerarySaving = false;
+  let itineraryConflict = false;
+  let itineraryActivitySequence = 0;
+  let expenseEdit = null;
+  let expenseSaving = false;
+  let expenseConflict = false;
+  let expenseDeletingId = null;
+  let expenseSequence = 0;
   let selectedPrivateDocument = null;
   let pendingPrivateUploads = 0;
   const incompleteDeletes = new Set();
@@ -438,7 +459,18 @@
     const message = reason === "已退出私人资料层" ? reason : "登录已失效，请重新登录";
     const signOutRun = documentService.reset(message);
     privateRequestVersion += 1;
+    sharedRequestVersion += 1;
     privateDocuments = [];
+    sharedSnapshot = null;
+    sharedDataRun = null;
+    sharedDataLoading = false;
+    itineraryEdit = null;
+    itinerarySaving = false;
+    itineraryConflict = false;
+    expenseEdit = null;
+    expenseSaving = false;
+    expenseConflict = false;
+    expenseDeletingId = null;
     selectedPrivateDocument = null;
     pendingPrivateUploads = 0;
     documentsLoading = false;
@@ -478,6 +510,7 @@
     if (documentsRun) return documentsRun;
     const runVersion = privateRequestVersion;
     documentsLoading = true;
+    renderHome();
     renderDocuments();
     const run = documentService.list().then((rows) => {
       if (runVersion === privateRequestVersion && documentService.authenticated) privateDocuments = rows;
@@ -497,10 +530,146 @@
     return run;
   }
 
-  function renderHome() {
+  function itineraryDays() {
+    return L.mergeItinerary(DATA.itinerary, sharedSnapshot?.itineraryOverrides || []);
+  }
+
+  function loadSharedSnapshot(force) {
+    if (!documentService.authenticated || !sharedDataService.configured) {
+      sharedSnapshot = null;
+      itineraryEdit = null;
+      itineraryConflict = false;
+      expenseEdit = null;
+      expenseConflict = false;
+      return Promise.resolve(null);
+    }
+    if (sharedDataRun) return sharedDataRun;
+    const runVersion = sharedRequestVersion;
+    sharedDataLoading = true;
+    renderHome();
+    renderItinerary();
+    renderBudget();
+    const request = force ? sharedDataService.refresh() : sharedDataService.loadSnapshot();
+    const run = request.then((snapshot) => {
+      if (runVersion === sharedRequestVersion && documentService.authenticated && snapshot) {
+        sharedSnapshot = {
+          currentUserId: snapshot.currentUserId,
+          members: snapshot.members || [],
+          itineraryOverrides: snapshot.itineraryOverrides || [],
+          expenses: snapshot.expenses || [],
+          loadedAt: snapshot.loadedAt || null
+        };
+      }
+      return snapshot;
+    }).catch(async (error) => {
+      if (runVersion !== sharedRequestVersion) return null;
+      if (["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error?.code)) {
+        await resetPrivateSession("登录已失效，请重新登录");
+      } else {
+        if (["MEMBERSHIP_REQUIRED", "FORBIDDEN"].includes(error?.code)) {
+          sharedSnapshot = null;
+          itineraryEdit = null;
+          itineraryConflict = false;
+          expenseEdit = null;
+          expenseConflict = false;
+        }
+        showToast(error?.message || "共享旅行数据读取失败");
+      }
+      return null;
+    }).finally(() => {
+      if (runVersion !== sharedRequestVersion) return;
+      sharedDataLoading = false;
+      sharedDataRun = null;
+      renderHome();
+      renderItinerary();
+      renderBudget();
+    });
+    sharedDataRun = run;
+    return run;
+  }
+
+  function commandCenterActive() {
+    return documentService.authenticated && sharedDataService.configured && Boolean(sharedSnapshot);
+  }
+
+  function commandSyncState() {
+    if (itineraryConflict || expenseConflict) return { key: "conflict", label: "冲突", detail: "共享记录已有更新，请重新打开后处理" };
+    if (navigator.onLine === false) return { key: "offline", label: "离线只读", detail: "保留当前内存快照，联网后再写入" };
+    if (itinerarySaving || expenseSaving || expenseDeletingId || pendingPrivateUploads > 0) return { key: "saving", label: "保存中", detail: "正在写入共享旅行数据" };
+    return { key: "synced", label: "已同步", detail: "共享快照已加载" };
+  }
+
+  function commandPeriodLabel(period) {
+    return ITINERARY_PERIODS.find(([name]) => name === period)?.[1] || period;
+  }
+
+  function renderCommandCenter() {
+    const itinerary = itineraryDays();
     const trip = L.tripMoment(DATA.meta);
-    const current = L.currentItinerary(DATA.itinerary);
-    const focusDay = current || (trip.phase === "upcoming" ? DATA.itinerary[0] : DATA.itinerary.at(-1));
+    const current = L.currentItinerary(itinerary);
+    const focusDay = current || (trip.phase === "upcoming" ? itinerary[0] : itinerary.at(-1));
+    const dayNumber = Math.max(1, itinerary.findIndex((day) => day.id === focusDay.id) + 1);
+    const timeline = L.itineraryTimeline(focusDay);
+    const nextAction = L.nextItineraryEvent(focusDay);
+    const todayExpenses = (sharedSnapshot.expenses || []).filter((expense) => expense.incurredOn === focusDay.date);
+    const expenseTotals = L.expenseLedgerTotals(todayExpenses);
+    const documents = documentCounts();
+    const sync = commandSyncState();
+    const connected = Math.min(2, sharedSnapshot.members.length);
+    const writesDisabled = sync.key === "offline" || sync.key === "saving" || sharedDataLoading;
+    const phaseLabel = trip.phase === "upcoming" ? "即将出发" : trip.phase === "traveling" ? "旅行进行中" : "旅行已结束";
+
+    $("#view-home").innerHTML = `<div class="command-center">
+      <header class="command-header">
+        <div class="command-header-top"><span class="command-private-label">Private Command Center</span><span class="command-sync-chip ${sync.key}" role="status" aria-live="polite">${esc(sync.label)}</span></div>
+        <p class="eyebrow">Current trip · ${esc(phaseLabel)}</p>
+        <h1>${esc(DATA.meta.title)}</h1>
+        <div class="command-travel-meta">
+          <div><span>当前 Day</span><strong>Day ${esc(dayNumber)}</strong><small>${esc(L.formatDate(focusDay.date, { month: "long", day: "numeric", weekday: "short" }))}</small></div>
+          <div><span>城市</span><strong>${esc(focusDay.city)}</strong><small>${esc(focusDay.theme)}</small></div>
+          <div><span>双人同步</span><strong>${esc(connected)}/2 已连接</strong><small>${esc(sync.label)}</small></div>
+        </div>
+      </header>
+
+      <div class="section-head"><div><p class="eyebrow">Next Action</p><h2>下一步</h2></div><p>${esc(focusDay.city)}</p></div>
+      <article class="card command-next-action">
+        <div class="command-next-time"><span>时间</span><strong>${esc(nextAction?.timeLabel || "待定")}</strong></div>
+        <div><p class="eyebrow">下一事件</p><h3>${esc(nextAction?.text || "今日已无后续安排")}</h3><p class="command-location">地点 · ${esc(focusDay.city)}</p></div>
+      </article>
+
+      <div class="section-head"><div><p class="eyebrow">Today Timeline</p><h2>今日行程</h2></div><p>${timeline.length}项</p></div>
+      <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${item.id === nextAction?.id ? "next" : ""}"><time>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(commandPeriodLabel(item.period))}</small></div></div>`).join("") : '<p class="empty">今天暂无活动</p>'}</div>
+
+      <div class="section-head"><div><p class="eyebrow">Expense Snapshot</p><h2>今日费用</h2></div><p>${todayExpenses.length}笔 · 不换汇</p></div>
+      <div class="command-expense-snapshot">${EXPENSE_CURRENCIES.map((currency) => {
+        const values = expenseTotals[currency];
+        const spending = values.paid + values.pending;
+        return `<article class="card command-expense-currency"><span>${currency}</span><strong>${esc(L.formatExpenseAmount(spending, currency))}</strong><small>已付 ${esc(L.formatExpenseAmount(values.paid, currency))}<br>待付 ${esc(L.formatExpenseAmount(values.pending, currency))} · 退款 ${esc(L.formatExpenseAmount(values.refunded, currency))}</small></article>`;
+      }).join("")}</div>
+
+      <div class="section-head"><div><p class="eyebrow">Quick Actions</p><h2>快速操作</h2></div></div>
+      <div class="command-quick-actions">
+        <button class="button command-action" type="button" data-command-itinerary="${esc(focusDay.id)}" ${writesDisabled ? "disabled" : ""}><strong>调整行程</strong><small>Day ${esc(dayNumber)}</small></button>
+        <button class="button command-action" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}><strong>记一笔</strong><small>共享费用</small></button>
+        <button class="button command-action" type="button" data-command-upload ${writesDisabled ? "disabled" : ""}><strong>上传资料</strong><small>${documentsLoading ? "读取中" : `${esc(documents.total)}份文件`}</small></button>
+        <button class="button command-action" type="button" data-go="documents"><strong>文件中心</strong><small>Private Bucket</small></button>
+      </div>
+
+      <div class="section-head"><div><p class="eyebrow">Sync Status</p><h2>同步状态</h2></div></div>
+      <article class="card command-sync-panel">
+        <div class="command-sync-summary"><span class="command-sync-chip ${sync.key}">${esc(sync.label)}</span><div><strong>${esc(sync.detail)}</strong><small>${sharedSnapshot.loadedAt ? `刷新于 ${esc(formatUpdated(sharedSnapshot.loadedAt))}` : "等待首次同步"}</small></div></div>
+        <div class="command-sync-grid"><div><span>共享行程</span><strong>${sharedSnapshot.itineraryOverrides.length}天</strong></div><div><span>费用账本</span><strong>${sharedSnapshot.expenses.length}笔</strong></div><div><span>私人资料</span><strong>${documents.total}份</strong></div><div><span>同步方式</span><strong>手动刷新</strong></div></div>
+        <div class="card-actions"><button class="button small" type="button" data-command-refresh ${navigator.onLine === false || sharedDataLoading ? "disabled" : ""}>${sharedDataLoading ? "刷新中" : "刷新共享数据"}</button></div>
+      </article>
+    </div>`;
+  }
+
+  function renderHome() {
+    if (commandCenterActive()) return renderCommandCenter();
+    const itinerary = itineraryDays();
+    const trip = L.tripMoment(DATA.meta);
+    const current = L.currentItinerary(itinerary);
+    const focusDay = current || (trip.phase === "upcoming" ? itinerary[0] : itinerary.at(-1));
     const urgent = L.urgentTasks(DATA.tasks, state.completedTasks, 3);
     const heroImage = DATA.gallery[0]?.src || fallbackImage("cover");
     const readiness = readinessItems();
@@ -605,28 +774,115 @@
   }
 
   function renderItinerary() {
-    const current = L.currentItinerary(DATA.itinerary);
+    const itinerary = itineraryDays();
+    const current = L.currentItinerary(itinerary);
+    const canEdit = documentService.authenticated && sharedDataService.configured && Boolean(sharedSnapshot);
+    const refreshButton = documentService.authenticated && sharedDataService.configured
+      ? `<button class="button" type="button" id="refresh-itinerary" ${sharedDataLoading ? "disabled" : ""}>${sharedDataLoading ? "正在同步" : "刷新共享行程"}</button>`
+      : "";
     $("#view-itinerary").innerHTML = `
-      <header class="page-header"><p class="eyebrow">Daily story</p><h1>每日行程</h1><p>慢一点，把时间留给风景和彼此。所有待确认安排都会保留，不会因冲突被自动删除。</p><div class="header-actions"><button class="button primary" type="button" id="jump-today" ${current ? "" : "disabled"}>跳到今天</button></div></header>
+      <header class="page-header"><p class="eyebrow">Daily story</p><h1>每日行程</h1><p>慢一点，把时间留给风景和彼此。所有待确认安排都会保留，不会因冲突被自动删除。</p><div class="header-actions"><button class="button primary" type="button" id="jump-today" ${current ? "" : "disabled"}>跳到今天</button>${refreshButton}</div></header>
       <article class="alert warning"><div><h3>${esc(DATA.alerts[1].title)}</h3><p>${esc(DATA.alerts[1].text)}</p></div></article>
-      <div class="timeline">${DATA.itinerary.map((day, index) => dayCard(day, current?.id === day.id, index === 0 && !current)).join("")}</div>
+      <div class="timeline">${itinerary.map((day, index) => dayCard(day, current?.id === day.id, index === 0 && !current, canEdit)).join("")}</div>
     `;
   }
 
-  function dayCard(day, isToday, openFallback) {
-    const periods = [["上午", day.periods.morning], ["中午", day.periods.noon], ["下午", day.periods.afternoon], ["晚上", day.periods.evening]];
+  function dayCard(day, isToday, openFallback, canEdit) {
+    const periods = ITINERARY_PERIODS.map(([period, label]) => [label, day.periods[period]]);
+    const editing = itineraryEdit?.value.dayId === day.id;
     return `<article class="card day-card ${isToday ? "today" : ""}" id="${esc(day.id)}">
       <div class="day-cover">
         <img src="${esc(day.image)}" alt="${esc(day.imageAlt)}" loading="lazy" onerror="this.onerror=null;this.src='${esc(fallbackImage("cover"))}'">
         <div class="day-cover-content"><div class="status-row"><time datetime="${esc(day.date)}">${esc(L.formatDate(day.date, { month: "long", day: "numeric", weekday: "long" }))}</time>${statusTag(day.status)}</div><h2>${esc(day.city)}</h2><p>${esc(day.theme)}</p></div>
       </div>
-      <div class="day-body"><details ${isToday || openFallback ? "open" : ""}><summary>查看当天安排</summary>
+      <div class="day-body">${editing ? itineraryEditor() : `<details ${isToday || openFallback ? "open" : ""}><summary>查看当天安排</summary>
         <div class="period"><span>交通</span><div>${esc(day.transport)}</div></div>
         ${periods.map(([label, items]) => `<div class="period"><span>${label}</span><ul>${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>`).join("")}
         <div class="note-box"><strong>注意事项</strong><ul class="notes-list">${day.notes.map((note) => `<li>${esc(note)}</li>`).join("")}</ul></div>
         <div class="map-actions">${day.maps.map((map) => `<a class="button small" href="${mapUrl("apple", map.query)}" target="_blank" rel="noopener">Apple地图 · ${esc(map.label)}</a><a class="button small ghost" href="${mapUrl("google", map.query)}" target="_blank" rel="noopener">Google Maps</a>`).join("")}</div>
-      </details></div>
+        ${canEdit && !itineraryEdit ? `<div class="itinerary-shared-actions">${day.overrideRevision ? `<span>共享版本 r${esc(day.overrideRevision)}</span>` : ""}<button class="button small primary" type="button" data-itinerary-edit="${esc(day.id)}">编辑当天</button></div>` : ""}
+      </details>`}</div>
     </article>`;
+  }
+
+  function itineraryEditor() {
+    const value = itineraryEdit.value;
+    const periods = ITINERARY_PERIODS.map(([period, label]) => {
+      const items = [...value.periods[period]].sort((a, b) => Number(a.status === "cancelled") - Number(b.status === "cancelled") || a.order - b.order);
+      const active = items.filter((item) => item.status !== "cancelled");
+      return `<section class="itinerary-edit-period"><div class="itinerary-edit-period-head"><strong>${label}</strong><button class="button small" type="button" data-itinerary-add="${period}">新增活动</button></div><div class="itinerary-activity-list">${items.length ? items.map((item) => {
+        const cancelled = item.status === "cancelled";
+        const position = active.findIndex((candidate) => candidate.id === item.id);
+        return `<div class="itinerary-activity ${cancelled ? "cancelled" : ""}">
+          <div class="itinerary-activity-fields"><label class="field">时间<input type="time" value="${esc(item.time || "")}" data-itinerary-field="time" data-period="${period}" data-activity-id="${esc(item.id)}" ${cancelled ? "disabled" : ""}></label><label class="field itinerary-activity-text">活动<input maxlength="300" value="${esc(item.text)}" data-itinerary-field="text" data-period="${period}" data-activity-id="${esc(item.id)}" ${cancelled ? "disabled" : "required"}></label></div>
+          <div class="itinerary-activity-actions">${cancelled ? '<span class="status cancelled">已取消</span>' : `<button class="button small ghost" type="button" data-itinerary-move="up" data-period="${period}" data-activity-id="${esc(item.id)}" ${position <= 0 ? "disabled" : ""}>上移</button><button class="button small ghost" type="button" data-itinerary-move="down" data-period="${period}" data-activity-id="${esc(item.id)}" ${position >= active.length - 1 ? "disabled" : ""}>下移</button><button class="button small danger" type="button" data-itinerary-remove data-period="${period}" data-activity-id="${esc(item.id)}">删除</button>`}</div>
+        </div>`;
+      }).join("") : '<p class="muted itinerary-empty-period">暂无活动</p>'}</div></section>`;
+    }).join("");
+    return `<form id="itinerary-override-form" class="itinerary-editor" aria-busy="${itinerarySaving}">
+      <div class="itinerary-editor-title"><div><strong>编辑当天行程</strong><span>${itineraryEdit.revision ? `共享版本 r${esc(itineraryEdit.revision)}` : "首次创建共享版本"}</span></div></div>
+      ${itineraryConflict ? '<article class="alert critical"><div><h3>发现版本冲突</h3><p>对方已更新当天行程。当前草稿仍保留，请取消后重新编辑最新版本。</p></div></article>' : ""}
+      <fieldset class="itinerary-editor-fields" ${itinerarySaving ? "disabled" : ""}>
+        <label class="field">交通摘要<textarea maxlength="1000" data-itinerary-root-field="transport">${esc(value.transport)}</textarea></label>
+        ${periods}
+        <label class="field">注意事项（每行一项）<textarea maxlength="10019" data-itinerary-notes>${esc(value.notes.join("\n"))}</textarea></label>
+      </fieldset>
+      <div class="itinerary-editor-actions"><button class="button primary" type="submit" ${itinerarySaving || itineraryConflict ? "disabled" : ""}>${itinerarySaving ? "保存中" : "保存共享行程"}</button><button class="button" type="button" data-itinerary-cancel>取消编辑</button></div>
+    </form>`;
+  }
+
+  function startItineraryEdit(dayId) {
+    if (!documentService.authenticated) return showToast("登录后才能编辑共享行程");
+    if (!sharedSnapshot) { loadSharedSnapshot(); return showToast("共享行程正在加载"); }
+    const baseDay = DATA.itinerary.find((day) => day.id === dayId);
+    if (!baseDay) return showToast("当天行程不存在");
+    const override = sharedSnapshot.itineraryOverrides.find((item) => item.dayId === dayId);
+    itineraryEdit = { value: L.itineraryDraft(baseDay, override, DATA.meta.version), revision: override?.revision ?? null };
+    itineraryConflict = false;
+    renderItinerary();
+    $(`#${dayId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function cancelItineraryEdit() {
+    itineraryEdit = null;
+    itineraryConflict = false;
+    renderItinerary();
+  }
+
+  function addItineraryActivity(period) {
+    if (!itineraryEdit) return;
+    itineraryActivitySequence += 1;
+    const id = window.crypto?.randomUUID ? window.crypto.randomUUID() : `activity-${Date.now().toString(36)}-${itineraryActivitySequence}`;
+    itineraryEdit.value = L.addItineraryActivity(itineraryEdit.value, period, id);
+    renderItinerary();
+    $(`[data-activity-id="${id}"][data-itinerary-field="text"]`)?.focus();
+  }
+
+  async function saveItineraryEdit() {
+    if (!itineraryEdit || itinerarySaving) return;
+    if (!documentService.authenticated) return showToast("登录后才能编辑共享行程");
+    itinerarySaving = true;
+    renderHome();
+    renderItinerary();
+    try {
+      await sharedDataService.saveItineraryOverride(itineraryEdit.value, itineraryEdit.revision);
+      itineraryEdit = null;
+      itineraryConflict = false;
+      const snapshot = await loadSharedSnapshot(true);
+      showToast(snapshot ? "共享行程已保存" : "行程已保存，刷新失败");
+    } catch (error) {
+      if (error?.code === "CONFLICT") {
+        itineraryConflict = true;
+        await loadSharedSnapshot(true);
+        showToast("对方已更新此行程，请取消后重新编辑");
+      } else if (["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error?.code)) {
+        await resetPrivateSession("登录已失效，请重新登录");
+      } else showToast(error?.message || "共享行程保存失败");
+    } finally {
+      itinerarySaving = false;
+      renderHome();
+      renderItinerary();
+    }
   }
 
   function renderBookings() {
@@ -773,7 +1029,185 @@
       `).join("")}</div><p class="card-subtitle" style="margin-top:12px">${esc(DATA.exchangeRates.note)}</p></article>
       <div class="section-head"><div><p class="eyebrow">Items</p><h2>预算项目</h2></div><p>实际花费可直接修改</p></div>
       <div class="grid budget-list">${DATA.budget.map(budgetCard).join("")}</div>
+      ${renderExpenseLedger()}
     `;
+  }
+
+  function renderExpenseLedger() {
+    if (!documentService.authenticated || !sharedDataService.configured) return "";
+    const expenses = sharedSnapshot?.expenses || [];
+    const totals = L.expenseLedgerTotals(expenses);
+    const body = !sharedSnapshot
+      ? `<article class="card expense-ledger-state"><p>${sharedDataLoading ? "正在读取共享费用…" : "当前账号无法读取共享费用。"}</p></article>`
+      : `
+        <div class="expense-summary">${EXPENSE_CURRENCIES.map((currency) => `<article class="card expense-currency"><h3>${currency}</h3>${Object.entries(EXPENSE_STATUSES).map(([status, label]) => `<div class="expense-status-row"><span>${label}</span><strong>${esc(L.formatExpenseAmount(totals[currency][status], currency))}</strong></div>`).join("")}</article>`).join("")}</div>
+        ${expenseEdit ? renderExpenseEditor() : ""}
+        <div class="expense-list">${expenses.length ? expenses.map(expenseCard).join("") : '<article class="card expense-ledger-state"><p>暂无共享费用，新增第一笔后双方即可读取。</p></article>'}</div>
+      `;
+    return `<section class="expense-ledger" aria-labelledby="expense-ledger-title">
+      <div class="section-head expense-ledger-head"><div><p class="eyebrow">Expense Ledger</p><h2 id="expense-ledger-title">共享费用账本</h2></div><div class="expense-ledger-actions"><button class="button small" type="button" data-expense-refresh ${sharedDataLoading || expenseEdit ? "disabled" : ""}>${sharedDataLoading ? "同步中" : "刷新"}</button><button class="button small primary" type="button" data-expense-create ${!sharedSnapshot || expenseEdit || sharedDataLoading ? "disabled" : ""}>新增费用</button></div></div>
+      <p class="expense-ledger-note">按 CNY、MYR、IDR、USD 分别汇总；不自动换汇。账本只保存在登录保护的共享数据库中。</p>
+      ${body}
+    </section>`;
+  }
+
+  function expenseMemberLabel(userId) {
+    if (!userId) return "付款成员已删除";
+    const member = sharedSnapshot?.members.find((item) => item.userId === userId);
+    if (!member) return "未知成员";
+    return `${member.relativeLabel}${member.role === "owner" ? " · Owner" : ""}`;
+  }
+
+  function expenseMemberOptions(selectedUserId) {
+    const options = (sharedSnapshot?.members || []).map((member) => `<option value="${esc(member.userId)}" ${member.userId === selectedUserId ? "selected" : ""}>${esc(expenseMemberLabel(member.userId))}</option>`).join("");
+    return `${selectedUserId ? "" : '<option value="" selected disabled>请选择当前成员</option>'}${options}`;
+  }
+
+  function expenseCard(expense) {
+    const canDelete = L.canDeleteExpense(expense, sharedSnapshot.currentUserId, sharedSnapshot.members);
+    const deleting = expenseDeletingId === expense.id;
+    return `<article class="card expense-row">
+      <div class="expense-row-title"><div><p class="eyebrow">${esc(EXPENSE_CATEGORIES[expense.category] || expense.category)}</p><h3>${esc(expense.title)}</h3></div><span class="status ${esc(expense.paymentStatus)}">${esc(EXPENSE_STATUSES[expense.paymentStatus] || expense.paymentStatus)}</span></div>
+      <strong class="expense-amount">${esc(L.formatExpenseAmount(expense.amountMinor, expense.currency))}</strong>
+      <div class="expense-meta"><span>${esc(L.formatDate(expense.incurredOn, { year: "numeric", month: "numeric", day: "numeric" }))}</span><span>${esc(expenseMemberLabel(expense.paidByUserId))}支付</span><span>${esc(EXPENSE_SPLITS[expense.splitMode] || expense.splitMode)}</span><span>r${esc(expense.revision)}</span></div>
+      ${expense.note ? `<p class="expense-note">${esc(expense.note)}</p>` : ""}
+      <div class="expense-row-actions"><button class="button small" type="button" data-expense-edit="${esc(expense.id)}" ${expenseEdit || expenseSaving || deleting ? "disabled" : ""}>编辑</button>${canDelete ? `<button class="button small danger" type="button" data-expense-delete="${esc(expense.id)}" ${expenseEdit || expenseSaving || deleting ? "disabled" : ""}>${deleting ? "删除中" : "删除"}</button>` : ""}</div>
+    </article>`;
+  }
+
+  function renderExpenseEditor() {
+    const value = expenseEdit.value;
+    const editLabel = expenseEdit.mode === "edit" ? `编辑费用 · r${expenseEdit.revision}` : "新增共享费用";
+    return `<form id="expense-ledger-form" class="card expense-form" aria-busy="${expenseSaving}">
+      <div class="expense-form-title"><div><p class="eyebrow">Ledger entry</p><h3>${esc(editLabel)}</h3></div></div>
+      ${expenseConflict ? '<article class="alert critical"><div><h3>这笔费用已有更新</h3><p>当前草稿仍保留。请取消后重新打开最新版本；若为幂等冲突，请取消后新建。</p></div></article>' : ""}
+      <fieldset class="expense-form-fields" ${expenseSaving ? "disabled" : ""}>
+        <div class="field-grid">
+          <label class="field">费用名称<input name="title" maxlength="160" value="${esc(value.title)}" required></label>
+          <label class="field">分类<select name="category" required>${Object.entries(EXPENSE_CATEGORIES).map(([category, label]) => `<option value="${category}" ${category === value.category ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+          <label class="field">金额<input name="amount" type="text" inputmode="decimal" maxlength="13" pattern="[0-9]{1,10}([.][0-9]{1,2})?" value="${esc(value.amount)}" placeholder="0.00" required></label>
+          <label class="field">币种<select name="currency" required>${EXPENSE_CURRENCIES.map((currency) => `<option ${currency === value.currency ? "selected" : ""}>${currency}</option>`).join("")}</select></label>
+          <label class="field">发生日期<input name="incurredOn" type="date" value="${esc(value.incurredOn)}" required></label>
+          <label class="field">付款人<select name="paidByUserId" required>${expenseMemberOptions(value.paidByUserId)}</select></label>
+          <label class="field">分摊方式<select name="splitMode" required>${Object.entries(EXPENSE_SPLITS).map(([mode, label]) => `<option value="${mode}" ${mode === value.splitMode ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+          <label class="field">支付状态<select name="paymentStatus" required>${Object.entries(EXPENSE_STATUSES).map(([status, label]) => `<option value="${status}" ${status === value.paymentStatus ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+        </div>
+        <label class="field">备注（可选）<textarea name="note" maxlength="500">${esc(value.note)}</textarea></label>
+      </fieldset>
+      <div class="expense-form-actions"><button class="button primary" type="submit" ${expenseSaving || expenseConflict ? "disabled" : ""}>${expenseSaving ? "保存中" : "保存费用"}</button><button class="button" type="button" data-expense-cancel ${expenseSaving ? "disabled" : ""}>取消</button></div>
+    </form>`;
+  }
+
+  function expenseClientRef() {
+    expenseSequence += 1;
+    const token = window.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${expenseSequence.toString(36)}`;
+    return `expense-${token}`;
+  }
+
+  function startExpenseCreate() {
+    if (!documentService.authenticated) return showToast("登录后才能新增共享费用");
+    if (!sharedSnapshot) return showToast("共享费用正在加载");
+    expenseEdit = {
+      mode: "create",
+      clientRef: expenseClientRef(),
+      value: { title: "", category: "other", amount: "", currency: "CNY", incurredOn: L.dateKey(new Date()), paidByUserId: sharedSnapshot.currentUserId, splitMode: "shared", paymentStatus: "paid", note: "" }
+    };
+    expenseConflict = false;
+    renderBudget();
+    $("#expense-ledger-form input[name=title]")?.focus();
+  }
+
+  function startExpenseEdit(id) {
+    if (!documentService.authenticated) return showToast("登录后才能编辑共享费用");
+    const expense = sharedSnapshot?.expenses.find((item) => item.id === id);
+    if (!expense) return showToast("费用不存在或正在刷新");
+    expenseEdit = {
+      mode: "edit",
+      id: expense.id,
+      revision: expense.revision,
+      value: { title: expense.title, category: expense.category, amount: L.expenseAmountValue(expense.amountMinor), currency: expense.currency, incurredOn: expense.incurredOn, paidByUserId: expense.paidByUserId || "", splitMode: expense.splitMode, paymentStatus: expense.paymentStatus, note: expense.note || "" }
+    };
+    expenseConflict = false;
+    renderBudget();
+    $("#expense-ledger-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function cancelExpenseEdit() {
+    expenseEdit = null;
+    expenseConflict = false;
+    renderBudget();
+  }
+
+  async function saveExpenseEdit(form) {
+    if (!expenseEdit || expenseSaving) return;
+    if (!documentService.authenticated) return showToast("登录后才能保存共享费用");
+    const fields = new FormData(form);
+    const value = {
+      title: String(fields.get("title") || "").trim(),
+      category: String(fields.get("category") || ""),
+      amount: String(fields.get("amount") || "").trim(),
+      currency: String(fields.get("currency") || ""),
+      incurredOn: String(fields.get("incurredOn") || ""),
+      paidByUserId: String(fields.get("paidByUserId") || ""),
+      splitMode: String(fields.get("splitMode") || ""),
+      paymentStatus: String(fields.get("paymentStatus") || ""),
+      note: String(fields.get("note") || "").trim()
+    };
+    const amountMinor = L.parseExpenseAmount(value.amount);
+    if (amountMinor === null) return showToast("金额需大于 0，且最多保留两位小数");
+    expenseEdit.value = value;
+    const payload = { title: value.title, category: value.category, amountMinor, currency: value.currency, incurredOn: value.incurredOn, paidByUserId: value.paidByUserId, splitMode: value.splitMode, paymentStatus: value.paymentStatus, note: value.note || null };
+    expenseSaving = true;
+    renderHome();
+    renderBudget();
+    try {
+      if (expenseEdit.mode === "create") await sharedDataService.createExpense({ clientRef: expenseEdit.clientRef, ...payload });
+      else await sharedDataService.updateExpense(expenseEdit.id, payload, expenseEdit.revision);
+      expenseEdit = null;
+      expenseConflict = false;
+      const snapshot = await loadSharedSnapshot(true);
+      showToast(snapshot ? "共享费用已保存" : "费用已保存，刷新失败");
+    } catch (error) {
+      if (["CONFLICT", "IDEMPOTENCY_CONFLICT"].includes(error?.code)) {
+        expenseConflict = true;
+        await loadSharedSnapshot(true);
+        showToast(error.code === "CONFLICT" ? "对方已更新此费用，请重新编辑" : "此新增标识对应了其他内容，请重新新建");
+      } else if (["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error?.code)) {
+        await resetPrivateSession("登录已失效，请重新登录");
+      } else showToast(error?.message || "共享费用保存失败");
+    } finally {
+      expenseSaving = false;
+      renderHome();
+      renderBudget();
+    }
+  }
+
+  async function deleteExpense(id) {
+    if (expenseDeletingId) return;
+    if (!documentService.authenticated) return showToast("登录后才能删除共享费用");
+    const expense = sharedSnapshot?.expenses.find((item) => item.id === id);
+    if (!expense) return showToast("费用不存在或正在刷新");
+    if (!L.canDeleteExpense(expense, sharedSnapshot.currentUserId, sharedSnapshot.members)) return showToast("仅创建者或 Owner 可删除");
+    if (!window.confirm(`确认删除“${expense.title}”？`)) return;
+    expenseDeletingId = id;
+    renderHome();
+    renderBudget();
+    try {
+      await sharedDataService.deleteExpense(expense.id, expense.revision);
+      await loadSharedSnapshot(true);
+      showToast("共享费用已删除");
+    } catch (error) {
+      if (["CONFLICT", "NOT_FOUND"].includes(error?.code)) {
+        await loadSharedSnapshot(true);
+        showToast(error.code === "CONFLICT" ? "费用已被更新，请确认最新版本" : "费用已不存在");
+      } else if (["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error?.code)) {
+        await resetPrivateSession("登录已失效，请重新登录");
+      } else showToast(error?.code === "FORBIDDEN" ? "仅创建者或 Owner 可删除" : (error?.message || "共享费用删除失败"));
+    } finally {
+      expenseDeletingId = null;
+      renderHome();
+      renderBudget();
+    }
   }
 
   function budgetByCurrency() {
@@ -868,6 +1302,59 @@
     if (deleteDocument) return deletePrivateDocument(deleteDocument.dataset.documentDelete);
     const copy = event.target.closest("[data-copy]");
     if (copy) return copyText(copy.dataset.copy);
+    const commandItinerary = event.target.closest("[data-command-itinerary]");
+    if (commandItinerary) {
+      if (navigator.onLine === false) return showToast("当前离线，只能查看已有数据");
+      switchView("itinerary");
+      if (itineraryEdit) $("#itinerary-override-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      else startItineraryEdit(commandItinerary.dataset.commandItinerary);
+      return;
+    }
+    if (event.target.closest("[data-command-expense]")) {
+      if (navigator.onLine === false) return showToast("当前离线，只能查看已有数据");
+      switchView("budget");
+      if (expenseEdit) $("#expense-ledger-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      else startExpenseCreate();
+      return;
+    }
+    if (event.target.closest("[data-command-upload]")) {
+      if (navigator.onLine === false) return showToast("当前离线，无法上传资料");
+      switchView("documents");
+      requestAnimationFrame(() => {
+        $("#document-upload")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        $("#document-upload input[name=title]")?.focus();
+      });
+      return;
+    }
+    if (event.target.closest("[data-command-refresh]")) {
+      if (navigator.onLine === false) return showToast("当前离线，只能查看已有数据");
+      return Promise.all([loadSharedSnapshot(true), loadPrivateDocuments()]);
+    }
+    if (event.target.closest("[data-expense-create]")) return startExpenseCreate();
+    const editExpense = event.target.closest("[data-expense-edit]");
+    if (editExpense) return startExpenseEdit(editExpense.dataset.expenseEdit);
+    const removeExpense = event.target.closest("[data-expense-delete]");
+    if (removeExpense) return deleteExpense(removeExpense.dataset.expenseDelete);
+    if (event.target.closest("[data-expense-cancel]")) return cancelExpenseEdit();
+    if (event.target.closest("[data-expense-refresh]")) return loadSharedSnapshot(true);
+    const editItinerary = event.target.closest("[data-itinerary-edit]");
+    if (editItinerary) return startItineraryEdit(editItinerary.dataset.itineraryEdit);
+    const addActivity = event.target.closest("[data-itinerary-add]");
+    if (addActivity) return addItineraryActivity(addActivity.dataset.itineraryAdd);
+    const moveActivity = event.target.closest("[data-itinerary-move]");
+    if (moveActivity && itineraryEdit) {
+      itineraryEdit.value = L.moveItineraryActivity(itineraryEdit.value, moveActivity.dataset.period, moveActivity.dataset.activityId, moveActivity.dataset.itineraryMove);
+      renderItinerary();
+      return;
+    }
+    const removeActivity = event.target.closest("[data-itinerary-remove]");
+    if (removeActivity && itineraryEdit) {
+      itineraryEdit.value = L.cancelItineraryActivity(itineraryEdit.value, removeActivity.dataset.period, removeActivity.dataset.activityId);
+      renderItinerary();
+      return;
+    }
+    if (event.target.closest("[data-itinerary-cancel]")) return cancelItineraryEdit();
+    if (event.target.id === "refresh-itinerary") return loadSharedSnapshot(true);
     if (event.target.id === "jump-today") return $(".day-card.today")?.scrollIntoView({ behavior: "smooth", block: "start" });
     if (event.target.id === "filter-open") { checklistFilter = checklistFilter === "open" ? "all" : "open"; renderChecklist(); return; }
     if (event.target.id === "clear-checklist") return clearChecklist();
@@ -906,7 +1393,36 @@
     if (hotel) { state.hotels[hotel] ||= {}; state.hotels[hotel][event.target.dataset.field] = event.target.value; save(); renderBookings(); renderMore(); showToast("酒店状态已更新"); }
   }
 
+  function handleInput(event) {
+    if (expenseEdit && event.target.form?.id === "expense-ledger-form" && Object.prototype.hasOwnProperty.call(expenseEdit.value, event.target.name)) {
+      expenseEdit.value = { ...expenseEdit.value, [event.target.name]: event.target.value };
+      return;
+    }
+    if (!itineraryEdit) return;
+    if (event.target.dataset.itineraryRootField === "transport") {
+      itineraryEdit.value = { ...itineraryEdit.value, transport: event.target.value };
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(event.target.dataset, "itineraryNotes")) {
+      itineraryEdit.value = { ...itineraryEdit.value, notes: event.target.value.split("\n").map((note) => note.trim()).filter(Boolean) };
+      return;
+    }
+    const field = event.target.dataset.itineraryField;
+    if (field) {
+      const value = field === "time" ? event.target.value || null : event.target.value;
+      itineraryEdit.value = L.updateItineraryActivity(itineraryEdit.value, event.target.dataset.period, event.target.dataset.activityId, field, value);
+    }
+  }
+
   async function handleSubmit(event) {
+    if (event.target.id === "expense-ledger-form") {
+      event.preventDefault();
+      return saveExpenseEdit(event.target);
+    }
+    if (event.target.id === "itinerary-override-form") {
+      event.preventDefault();
+      return saveItineraryEdit();
+    }
     if (event.target.id === "document-login") {
       event.preventDefault();
       const button = event.target.querySelector("button[type=submit]");
@@ -915,7 +1431,7 @@
         const form = new FormData(event.target);
         await documentService.signIn(form.get("email"), form.get("password"));
         showToast("私人资料层登录成功");
-        await loadPrivateDocuments();
+        await Promise.all([loadPrivateDocuments(), loadSharedSnapshot(true)]);
       } catch (error) {
         showToast(error.message || "登录失败");
         button.disabled = false;
@@ -928,6 +1444,7 @@
       const runVersion = privateRequestVersion;
       button.disabled = true;
       pendingPrivateUploads += 1;
+      renderHome();
       try {
         const form = new FormData(event.target);
         await documentService.upload({
@@ -944,7 +1461,10 @@
           button.disabled = false;
         }
       } finally {
-        if (runVersion === privateRequestVersion) pendingPrivateUploads = Math.max(0, pendingPrivateUploads - 1);
+        if (runVersion === privateRequestVersion) {
+          pendingPrivateUploads = Math.max(0, pendingPrivateUploads - 1);
+          renderHome();
+        }
       }
     }
   }
@@ -1091,7 +1611,7 @@
       if (!session) return resetPrivateSession("登录已失效，请重新登录");
       privateSessionChecking = false;
       renderAll();
-      return loadPrivateDocuments();
+      return Promise.all([loadPrivateDocuments(), loadSharedSnapshot(true)]);
     }).catch(() => null).finally(() => {
       if (privateSessionRun === run) privateSessionRun = null;
     });
@@ -1107,6 +1627,7 @@
         syncChecklistFromCloud();
         if (!Object.keys(weatherByLocation).length) loadWeatherData();
       } else checklistSync.markOffline();
+      renderHome();
     };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
@@ -1144,6 +1665,7 @@
     renderAll();
     document.addEventListener("click", handleClick);
     document.addEventListener("change", handleChange);
+    document.addEventListener("input", handleInput);
     document.addEventListener("submit", handleSubmit);
     $("#import-file").addEventListener("change", handleImport);
     setupNetwork();

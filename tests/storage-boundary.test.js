@@ -22,6 +22,6 @@ assert.match(documents, /const SIGNED_URL_SECONDS = 60;/, "signed URL 不是 60 
 assert.match(documents, /JSON\.stringify\(\{ expiresIn: SIGNED_URL_SECONDS \}\)/, "signed URL 请求未固定为 60 秒");
 assert.match(app, /documentService\.signedUrl\(item\)/, "查看操作没有每次重新签发 URL");
 assert.match(app, /visibilitychange[\s\S]*clearSignedUrls/, "页面隐藏时未清理 signed URL 引用");
-assert.match(worker, /privateRequest[\s\S]*travel_documents[\s\S]*storage\/v1/, "Service Worker 未显式排除私人请求");
+assert.match(worker, /privateRequest[\s\S]*rest\/v1[\s\S]*auth\/v1[\s\S]*storage\/v1/, "Service Worker 未显式排除私人请求");
 
 console.log("storage boundary: ok");

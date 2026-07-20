@@ -156,6 +156,13 @@ node tests/storage-boundary.test.js
 
 PWA 离线检查需通过本地服务器或 HTTPS 地址完成。生产验证按 [`PRODUCTION-SMOKE-TEST.md`](PRODUCTION-SMOKE-TEST.md) 执行。
 
+v1.5.1 发布前先运行完整测试和 RC 验证；完成提交后再运行 Git 发布门禁：
+
+```bash
+node --test tests/*.test.js
+node tests/release-candidate.test.js --release
+```
+
 ## Travel Data Layer
 
 - 天气：使用 Open-Meteo Forecast API 自动读取温度、降雨概率与日落时间，不需要 API key；海况字段保持 `TBD`。
