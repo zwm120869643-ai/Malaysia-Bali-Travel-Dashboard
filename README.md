@@ -1,6 +1,6 @@
 # Malaysia Bali Travel Dashboard
 
-《马来西亚 × 巴厘岛情侣旅行总控台》是一个面向 iPhone 的原生 PWA。无需构建；旅行数据集中在 `data/trip-data.js`，本机修改保存在 `localStorage`。可选的 Supabase 层只同步清单完成状态，未配置时自动保持离线模式。
+《马来西亚 × 巴厘岛情侣旅行总控台》是一个面向 iPhone 的原生 PWA。无需构建；旅行数据集中在 `data/trip-data.js`，本机修改保存在 `localStorage`。Supabase 用于共享清单，以及经 Auth 和 RLS 保护的私人资料中心。
 
 ## 本地使用
 
@@ -68,10 +68,11 @@ iPhone 与 Mac 连接同一 Wi-Fi 后：
 - 实际花费、币种、付款人和支付状态
 - 航班实际状态与状态标签
 - 酒店确认状态
-- 今日提醒与临时备注
 - 基础数据版本和本机最后修改时间
 
 “更多 → 本机修改数据”可导出、导入或恢复基础数据；清单页也能单独导入导出。清除浏览器网站数据会删除本机修改，请先导出 JSON。
+
+今日提醒与临时备注只保留在当前页面内存，刷新或关闭页面后消失；不会进入 `localStorage`、Supabase、Offline Pack 或 Service Worker Cache。
 
 ## GitHub Pages 部署
 
@@ -101,7 +102,7 @@ GitHub Pages 可能是公开网页。绝对不要提交：
 - 完整预订编号、私人订单 PDF、保险保单原件
 - 入境二维码、签证材料、API Key
 
-这些文件应继续保存在私密 iCloud Drive 中。公开页面只保留行程、景点、酒店名称、航班号、非敏感提醒和模糊化状态。
+这些文件不得进入 Git 仓库。私人原件可保存在私密 iCloud Drive，或通过登录后的 Document Center 上传到 Supabase Private Bucket。
 
 ## 当前待确认
 
@@ -128,6 +129,16 @@ Phase 1 只同步清单字段，不上传航班、酒店、费用、备注、证
 
 Publishable/anon key 会出现在公开网页中，这是浏览器端应用的正常行为；安全边界由 RLS 控制。绝对不要填写 Supabase secret 或 service_role key。当前 Phase 1 的匿名策略只适合非敏感 Checklist，任何人只要能访问公开站点及配置就可能修改状态；需要严格的情侣身份隔离时，应在下一阶段增加 Supabase Auth。
 
+## Supabase 私人资料中心
+
+1. 在 Supabase SQL Editor 依次执行 [`supabase/travel_documents.sql`](supabase/travel_documents.sql) 和 [`supabase/trip_members.sql`](supabase/trip_members.sql)。脚本会创建 `travel_documents`、`trip_members`、私有 `travel-documents` Bucket，以及同一 trip 的 Owner / Member 共享 RLS。
+2. 在 `Authentication → Users` 创建两个邮箱登录账号，再仅通过 SQL Editor 添加各自 membership；不要把真实 UUID、邮箱或密码写进项目文件。
+3. 打开首页的 “📂 Document Center”，用成员账号登录后上传 PDF、PNG 或 JPG（单个文件最大 10MB）。
+4. 航班和酒店文件上传时选择关联项目，随后会出现在对应预订卡片；入境文件集中显示在 Immigration Center。
+5. 每次点击“查看”都会重新生成 60 秒 signed URL。登录会话只保存在 `sessionStorage`，不会进入清单 `localStorage` 备份或 Service Worker 缓存。
+
+Document Center 使用现有 publishable key。绝对不要使用 secret/service_role key；Bucket 必须保持 `public = false`，也不要把真实 PDF、图片、signed URL 或账号密码加入 Git。
+
 ## 检查
 
 运行无依赖逻辑检查：
@@ -137,9 +148,13 @@ node tests/dashboard.test.js
 node tests/sync.test.js
 node tests/weather.test.js
 node tests/offline-pack.test.js
+node tests/documents.test.js
+node tests/auth-session.test.js
+node tests/document-delete-recovery.test.js
+node tests/storage-boundary.test.js
 ```
 
-PWA 离线检查需通过本地服务器或 HTTPS 地址完成。
+PWA 离线检查需通过本地服务器或 HTTPS 地址完成。生产验证按 [`PRODUCTION-SMOKE-TEST.md`](PRODUCTION-SMOKE-TEST.md) 执行。
 
 ## Travel Data Layer
 

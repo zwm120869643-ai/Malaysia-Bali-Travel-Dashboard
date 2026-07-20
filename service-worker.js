@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "malaysia-bali-dashboard-";
-const CACHE = `${CACHE_PREFIX}v1.4.3`;
+const CACHE = `${CACHE_PREFIX}v1.5.0`;
 const SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,7 @@ const SHELL = [
   "./js/logic.js",
   "./js/sync.js",
   "./js/weather.js",
+  "./js/documents.js",
   "./js/app.js",
   "./assets/images/placeholder-cover.svg",
   "./assets/images/placeholder-hotel.svg",
@@ -36,7 +37,9 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET" || new URL(event.request.url).origin !== location.origin) return;
+  const url = new URL(event.request.url);
+  const privateRequest = url.pathname.includes("/rest/v1/travel_documents") || url.pathname.includes("/storage/v1/");
+  if (event.request.method !== "GET" || privateRequest || url.origin !== location.origin) return;
 
   if (event.request.mode === "navigate") {
     event.respondWith(fetch(event.request).then((response) => {

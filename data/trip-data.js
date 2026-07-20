@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.4.3",
-    versionName: "Private-Public Bridge",
-    versionLabel: "私人资料公开状态桥接版",
-    lastUpdated: "2026-07-20T01:10:55+08:00",
+    version: "1.5.0",
+    versionName: "Private Document Center",
+    versionLabel: "私人资料中心版",
+    lastUpdated: "2026-07-20T01:45:45+08:00",
     weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -461,6 +461,9 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-20T01:45:45+08:00", version: "1.5.0", change: "Added authenticated Private Document Center" },
+    { at: "2026-07-20T01:45:45+08:00", version: "1.5.0", change: "Added private Storage uploads with short-lived signed URLs" },
+    { at: "2026-07-20T01:45:45+08:00", version: "1.5.0", change: "Added flight, hotel and immigration document associations" },
     { at: "2026-07-20T01:10:55+08:00", version: "1.4.3", change: "Added public-safe document readiness summaries" },
     { at: "2026-07-20T01:10:55+08:00", version: "1.4.3", change: "Added Private-Public Bridge status cards" },
     { at: "2026-07-20T01:10:55+08:00", version: "1.4.3", change: "Added emergency document saved states without private metadata" },

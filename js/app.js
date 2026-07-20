@@ -6,6 +6,7 @@
   const L = window.DashboardLogic;
   const STORAGE_KEY = "malaysia-bali-dashboard-overrides-v1";
   const SYNC_DEVICE_KEY = "malaysia-bali-sync-device-v1";
+  const LOCAL_STORAGE_ALLOWLIST = new Set([STORAGE_KEY, SYNC_DEVICE_KEY]);
   const ASSIGNEES = ["我", "女朋友", "共同完成"];
   const STATUSES = ["pending", "confirmed", "changed", "cancelled"];
   const ACTUAL_FLIGHT_STATUSES = ["等待确认", "正常", "延误", "取消", "已完成"];
@@ -75,18 +76,42 @@
       const value = raw.hotels[item.id];
       if (isRecord(value) && STATUSES.includes(value.status)) clean.hotels[item.id] = { status: value.status };
     });
-    if (isRecord(raw.notes)) {
-      if (typeof raw.notes.today === "string") clean.notes.today = raw.notes.today.slice(0, 500);
-      if (typeof raw.notes.temporary === "string") clean.notes.temporary = raw.notes.temporary.slice(0, 1000);
-    }
     return clean;
   }
 
-  // ponytail: localStorage stays the durable fallback; only checklist state leaves this boundary.
+  function persistentState(value) {
+    return {
+      baseVersion: value.baseVersion,
+      updatedAt: value.updatedAt,
+      lastSyncedAt: value.lastSyncedAt,
+      syncUserName: value.syncUserName,
+      completedTasks: value.completedTasks,
+      pendingChecklistSync: value.pendingChecklistSync,
+      assignees: value.assignees,
+      budget: value.budget,
+      flights: value.flights,
+      hotels: value.hotels
+    };
+  }
+
+  function enforceLocalStorageBoundary() {
+    try {
+      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+        const key = localStorage.key(index);
+        if (key?.startsWith("malaysia-bali-") && !LOCAL_STORAGE_ALLOWLIST.has(key)) localStorage.removeItem(key);
+      }
+    } catch (_) { /* file:// may block storage */ }
+  }
+
+  enforceLocalStorageBoundary();
+
+  // ponytail: persist an explicit non-sensitive allowlist, never the whole runtime state.
   const storage = {
     get() {
       try {
-        return normalizeState(JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
+        const clean = normalizeState(JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(persistentState(clean)));
+        return clean;
       } catch (_) {
         return emptyState();
       }
@@ -94,7 +119,7 @@
     set(next) {
       next.updatedAt = new Date().toISOString();
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(persistentState(next)));
         return true;
       } catch (_) {
         return false;
@@ -119,10 +144,23 @@
     ? window.TravelChecklistSync.create(window.TRAVEL_SYNC_CONFIG)
     : { configured: false, userName: "TBD", status: "offline", subscribe() {}, markOffline() {}, async push() { return false; }, async pull() { return null; } };
   const weatherService = window.TravelWeather ? window.TravelWeather.create() : { async load() { return []; } };
+  const documentService = window.TravelDocuments
+    ? window.TravelDocuments.create(window.TRAVEL_SYNC_CONFIG)
+    : { configured: false, authenticated: false, hasSession: false, categories: [], canDelete() { return false; }, onInvalid() {}, clearSignedUrls() {}, async reset() {}, async getSession() { return null; }, async signIn() { throw new Error("私人资料服务未加载"); }, async list() { return []; }, async upload() { throw new Error("私人资料服务未加载"); }, async signedUrl() { throw new Error("私人资料服务未加载"); }, async remove() { return false; } };
   let state = storage.get();
   let weatherByLocation = {};
   let weatherLoading = true;
   let weatherRun;
+  let privateDocuments = [];
+  let documentsLoading = false;
+  let documentsRun;
+  let privateRequestVersion = 0;
+  let privateSessionChecking = false;
+  let privateSessionRun;
+  let selectedPrivateDocument = null;
+  let pendingPrivateUploads = 0;
+  const incompleteDeletes = new Set();
+  const generatedObjectUrls = new Set();
   let syncStatus = checklistSync.status;
   let checklistSyncRun;
   let checklistFilter = "all";
@@ -170,9 +208,13 @@
     const blob = new Blob([content], { type: "application/json" });
     const anchor = document.createElement("a");
     anchor.href = URL.createObjectURL(blob);
+    generatedObjectUrls.add(anchor.href);
     anchor.download = name;
     anchor.click();
-    setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+    setTimeout(() => {
+      URL.revokeObjectURL(anchor.href);
+      generatedObjectUrls.delete(anchor.href);
+    }, 1000);
   }
 
   function formatUpdated(value) {
@@ -354,6 +396,107 @@
     return `<article class="card"><p class="eyebrow">Weather</p><h3>目的地天气</h3><div class="today-list">${rows}<div class="today-row"><span>海况</span><strong>TBD</strong></div></div></article>`;
   }
 
+  const documentCategoryLabels = {
+    flights: "航班",
+    hotels: "酒店",
+    immigration: "入境",
+    transport: "交通",
+    activities: "活动",
+    finance: "财务"
+  };
+
+  function documentCounts() {
+    return privateDocuments.reduce((counts, item) => {
+      counts.total += 1;
+      counts[item.category] = (counts[item.category] || 0) + 1;
+      return counts;
+    }, { total: 0 });
+  }
+
+  function relatedItemName(id) {
+    const flight = DATA.flights.find((item) => item.id === id);
+    if (flight) return `${flight.flightNumber} · ${flight.date}`;
+    const hotel = DATA.hotels.find((item) => item.id === id);
+    return hotel ? hotel.nameZh : "未关联具体行程";
+  }
+
+  function relatedOptions(category) {
+    const items = category === "flights"
+      ? DATA.flights.map((item) => ({ id: item.id, label: `${item.flightNumber} · ${item.date}` }))
+      : category === "hotels"
+        ? DATA.hotels.map((item) => ({ id: item.id, label: item.nameZh }))
+        : [];
+    return `<option value="">不关联具体项目</option>${items.map((item) => `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("")}`;
+  }
+
+  function revokeGeneratedObjectUrls() {
+    generatedObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+    generatedObjectUrls.clear();
+  }
+
+  async function resetPrivateSession(reason) {
+    const message = reason === "已退出私人资料层" ? reason : "登录已失效，请重新登录";
+    const signOutRun = documentService.reset(message);
+    privateRequestVersion += 1;
+    privateDocuments = [];
+    selectedPrivateDocument = null;
+    pendingPrivateUploads = 0;
+    documentsLoading = false;
+    documentsRun = null;
+    privateSessionChecking = false;
+    privateSessionRun = null;
+    incompleteDeletes.clear();
+    documentService.clearSignedUrls();
+    revokeGeneratedObjectUrls();
+    renderAll();
+    switchView("documents", false);
+    showToast(message);
+    await signOutRun;
+    return message;
+  }
+
+  documentService.onInvalid(resetPrivateSession);
+
+  function linkedDocumentBlock(category, relatedItemId) {
+    const matches = privateDocuments.filter((item) => item.category === category && item.related_item_id === relatedItemId);
+    const body = !documentService.authenticated
+      ? '<span class="muted">登录后查看</span>'
+      : matches.length
+        ? matches.map((item) => `<button class="button small ghost" type="button" data-document-open="${esc(item.id)}">${esc(item.title)}</button>`).join("")
+        : '<span class="muted">暂无关联文件</span>';
+    return `<div class="document-links"><strong>关联文件</strong><div>${body}<button class="button small" type="button" data-go="documents">资料中心</button></div></div>`;
+  }
+
+  function loadPrivateDocuments() {
+    if (!documentService.authenticated) {
+      privateDocuments = [];
+      renderHome();
+      renderBookings();
+      renderDocuments();
+      return Promise.resolve([]);
+    }
+    if (documentsRun) return documentsRun;
+    const runVersion = privateRequestVersion;
+    documentsLoading = true;
+    renderDocuments();
+    const run = documentService.list().then((rows) => {
+      if (runVersion === privateRequestVersion && documentService.authenticated) privateDocuments = rows;
+      return rows;
+    }).catch((error) => {
+      if (runVersion === privateRequestVersion) showToast(error.message || "私人资料读取失败");
+      return [];
+    }).finally(() => {
+      if (runVersion !== privateRequestVersion) return;
+      documentsLoading = false;
+      documentsRun = null;
+      renderHome();
+      renderBookings();
+      renderDocuments();
+    });
+    documentsRun = run;
+    return run;
+  }
+
   function renderHome() {
     const trip = L.tripMoment(DATA.meta);
     const current = L.currentItinerary(DATA.itinerary);
@@ -412,6 +555,7 @@
         <article class="card"><p class="eyebrow">Flight</p><h3>${esc(todayFlight?.flightNumber || "TBD")}</h3><div class="today-list"><div class="today-row"><span>出发</span><strong>${esc(todayFlight ? `${todayFlight.departureTime} · ${todayFlight.departureAirport}` : "TBD")}</strong></div><div class="today-row"><span>抵达</span><strong>${esc(todayFlight ? `${todayFlight.arrivalTime} · ${todayFlight.arrivalAirport}` : "TBD")}</strong></div><div class="today-row"><span>状态</span><strong>${esc(todayFlight?.status || "missing")}</strong></div></div></article>
         <article class="card"><p class="eyebrow">Hotel</p><h3>${esc(todayHotel?.nameZh || "住宿待确认")}</h3><div class="today-list"><div class="today-row"><span>入住</span><strong>${esc(todayHotel?.checkIn || "TBD")}</strong></div><div class="today-row"><span>退房</span><strong>${esc(todayHotel?.checkOut || "TBD")}</strong></div><div class="today-row"><span>状态</span><strong>${esc(todayHotel?.status || "missing")}</strong></div></div></article>
         <article class="card readiness-card"><p class="eyebrow">Checklist</p><h3>旅行清单</h3><div class="today-list"><div class="today-row"><span>完成</span><strong>${esc(departureStatus.completionRate)}%</strong></div><div class="today-row"><span>重要待办</span><strong>${esc(departureStatus.highPriorityRemaining)}项</strong></div><div class="today-row"><span>离线摘要</span><strong>${esc(OFFLINE_PACK.checklistSummary.total)}项</strong></div></div></article>
+        <article class="card"><p class="eyebrow">Private storage</p><h3>📂 Document Center</h3><div class="today-list"><div class="today-row"><span>文件</span><strong>${documentService.authenticated ? `${esc(documentCounts().total)}份` : "登录后查看"}</strong></div><div class="today-row"><span>航班</span><strong>${documentService.authenticated ? `${esc(documentCounts().flights || 0)}份` : "私有"}</strong></div><div class="today-row"><span>酒店 / 入境</span><strong>${documentService.authenticated ? `${esc(documentCounts().hotels || 0)} / ${esc(documentCounts().immigration || 0)}` : "私有"}</strong></div></div><div class="card-actions"><button class="button small" type="button" data-go="documents">打开资料中心</button></div></article>
         <article class="card"><p class="eyebrow">Inbox</p><h3>Travel Inbox</h3><div class="today-list"><div class="today-row"><span>待处理</span><strong>${esc(inbox.pending)}项</strong></div><div class="today-row"><span>已确认</span><strong>${esc(inbox.verified)}项</strong></div><div class="today-row"><span>存储</span><strong>私人层</strong></div></div></article>
         <article class="card"><p class="eyebrow">Emergency</p><h3>${esc(emergencyContact?.label || "紧急信息")}</h3><div class="today-list"><div class="today-row"><span>地区</span><strong>${esc(emergencyContact?.region || "TBD")}</strong></div><div class="today-row"><span>电话</span><strong>${esc(emergencyContact?.phone || "TBD")}</strong></div><div class="today-row"><span>离线</span><strong>可用</strong></div></div></article>
       </div>
@@ -519,6 +663,7 @@
       </div>
       ${flight.id === "flight-bali-kl" ? `<div class="note-box"><strong>转机缓冲</strong><br>${esc(bufferText)}</div>` : ""}
       <p class="card-subtitle" style="margin-top:12px">${esc(flight.notes)}</p>
+      ${linkedDocumentBlock("flights", flight.id)}
       <div class="card-actions"><button class="button small" type="button" data-copy="${esc(flight.flightNumber)}">复制航班号</button><button class="button small ghost" type="button" data-copy="${esc(flight.departureAirport)}">复制起飞机场</button><button class="button small ghost" type="button" data-copy="${esc(flight.arrivalAirport)}">复制抵达机场</button></div>
     </article>`;
   }
@@ -542,8 +687,53 @@
         <div class="info"><span>押金方式</span><strong>${esc(hotel.depositMethod)}</strong></div>
       </div>
       <details><summary class="button small" style="margin-top:12px">查看订单备注</summary><p class="card-subtitle">订单别名：${esc(hotel.orderAlias)}<br>${esc(hotel.notes)}</p></details>
+      ${linkedDocumentBlock("hotels", hotel.id)}
       <div class="card-actions"><button class="button small" type="button" data-copy="${esc(hotel.address)}">复制地址</button><a class="button small ghost" href="${mapUrl("google", hotel.address)}" target="_blank" rel="noopener">Google Maps</a><a class="button small ghost" href="${mapUrl("apple", hotel.address)}" target="_blank" rel="noopener">Apple地图</a><a class="button small ghost ${phoneReady ? "" : "disabled"}" ${phoneReady ? `href="tel:${esc(hotel.phone)}"` : 'aria-disabled="true"'}>联系酒店</a></div>
     </article>`;
+  }
+
+  function documentRow(item) {
+    const created = item.created_at ? formatUpdated(item.created_at) : "时间未知";
+    const incomplete = incompleteDeletes.has(item.id);
+    const deletable = documentService.canDelete(item);
+    return `<div class="document-row"><div><strong>${esc(item.title)}</strong><span>${incomplete ? "文件已移除 · 元数据待重试" : `${esc(relatedItemName(item.related_item_id))} · ${esc(created)}`}</span></div><div class="document-row-actions">${incomplete ? "" : `<button class="button small" type="button" data-document-open="${esc(item.id)}">查看</button>`}${deletable ? `<button class="button small danger" type="button" data-document-delete="${esc(item.id)}">${incomplete ? "重试清理" : "删除"}</button>` : ""}</div></div>`;
+  }
+
+  function renderDocuments() {
+    const container = $("#view-documents");
+    if (!container) return;
+    if (!documentService.configured) {
+      container.innerHTML = `<header class="page-header"><p class="eyebrow">Private storage</p><h1>📂 Document Center</h1></header><article class="card"><h3>尚未配置</h3><p class="card-subtitle">请检查 Supabase publishable key 与 tripId。不得使用 secret 或 service_role key。</p><div class="card-actions"><button class="button small" type="button" data-go="home">返回首页</button></div></article>`;
+      return;
+    }
+    if (privateSessionChecking || (documentService.hasSession && !documentService.authenticated)) {
+      container.innerHTML = `<header class="page-header"><p class="eyebrow">Private storage</p><h1>📂 Document Center</h1></header><article class="card"><h3>正在验证登录</h3><p class="card-subtitle">私人内容会在真实 session 验证成功后加载。</p></article>`;
+      return;
+    }
+    if (!documentService.authenticated) {
+      container.innerHTML = `<header class="page-header"><p class="eyebrow">Private storage</p><h1>📂 Document Center</h1><p>私人文件只存入 Supabase Private Bucket；查看链接 60 秒后失效。</p></header>
+        <form id="document-login" class="card document-auth"><h3>登录私人资料层</h3><label class="field">邮箱<input name="email" type="email" autocomplete="username" required></label><label class="field">密码<input name="password" type="password" autocomplete="current-password" required></label><button class="button primary" type="submit">登录</button><p class="card-subtitle">登录仅保留在当前浏览会话。GitHub 不保存账号、密码、文件或 signed URL。</p></form>`;
+      return;
+    }
+
+    const counts = documentCounts();
+    const categories = documentService.categories || Object.keys(documentCategoryLabels);
+    container.innerHTML = `<header class="page-header"><p class="eyebrow">Private storage</p><h1>📂 Document Center</h1><p>${esc(documentService.user?.email || "已登录")} · Private Bucket · signed URL 60秒有效</p><div class="header-actions"><button class="button" type="button" id="refresh-documents">刷新</button><button class="button danger" type="button" id="document-logout">退出私人资料层</button><button class="button" type="button" data-go="home">返回首页</button></div></header>
+      <article class="card"><p class="eyebrow">Overview</p><h3>${esc(counts.total)} 份私人文件</h3><div class="document-summary">${categories.map((category) => `<div><span>${esc(documentCategoryLabels[category] || category)}</span><strong>${esc(counts[category] || 0)}</strong></div>`).join("")}</div></article>
+      <div class="section-head"><div><p class="eyebrow">Upload</p><h2>添加文件</h2></div><p>PDF / PNG / JPG · 最大10MB</p></div>
+      <form id="document-upload" class="card">
+        <div class="field-grid"><label class="field">分类<select id="document-category" name="category">${categories.map((category) => `<option value="${esc(category)}">${esc(documentCategoryLabels[category] || category)}</option>`).join("")}</select></label><label class="field">关联项目<select id="document-related" name="relatedItemId">${relatedOptions(categories[0])}</select></label></div>
+        <label class="field" style="margin-top:10px">标题<input name="title" maxlength="160" placeholder="例如：3U3995 航班资料" required></label>
+        <label class="field" style="margin-top:10px">文件<input name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required></label>
+        <button class="button primary" type="submit" style="margin-top:12px">上传到私人 Bucket</button>
+        <p class="card-subtitle" style="margin-top:10px">不要在标题中填写证件号、订单号、银行卡或密码；原文件不会进入 Git。</p>
+      </form>
+      <div class="section-head"><div><p class="eyebrow">Private registry</p><h2>文件中心</h2></div><p>${documentsLoading ? "读取中" : `${counts.total}份`}</p></div>
+      <div class="grid document-centers">${categories.map((category) => {
+        const rows = privateDocuments.filter((item) => item.category === category);
+        const heading = category === "flights" ? "Flight Center" : category === "hotels" ? "Hotel Center" : category === "immigration" ? "Immigration Center" : `${documentCategoryLabels[category] || category}资料`;
+        return `<article class="card"><p class="eyebrow">${esc(category)}</p><h3>${esc(heading)}</h3><div class="document-list">${rows.length ? rows.map(documentRow).join("") : `<p class="empty">${documentsLoading ? "正在读取" : "暂无文件"}</p>`}</div></article>`;
+      }).join("")}</div>`;
   }
 
   function renderChecklist() {
@@ -631,12 +821,13 @@
       <div class="settings-grid">
         <article class="card wide"><p class="eyebrow">Gallery</p><h3>旅行图片</h3><div class="gallery">${DATA.gallery.map((image) => `<figure class="gallery-item"><img src="${esc(image.src)}" alt="${esc(image.alt)}" loading="lazy" onerror="this.onerror=null;this.src='${esc(fallbackImage("cover"))}'"><span>${esc(image.label)}</span></figure>`).join("")}</div></article>
         <article class="card"><p class="eyebrow">Emergency</p><h3>紧急中心</h3><div class="today-list">${DATA.documentReadiness.emergencyStatus.map((item) => `<div class="today-row"><span>${esc(item.label)}</span><strong>${esc(item.status)}</strong></div>`).join("")}</div><div class="emergency-list">${DATA.emergency.map((contact) => `<div class="contact-row"><div><strong>${esc(contact.label)}</strong><span>${esc(contact.region)} · ${esc(contact.notes)}</span></div>${contact.phone === "TBD" ? '<b class="muted">TBD</b>' : `<a href="tel:${esc(contact.phone)}">${esc(contact.phone)}</a>`}</div>`).join("")}</div></article>
-        <article class="card"><p class="eyebrow">Local notes</p><h3>本机备注</h3><label class="field">今日提醒<textarea id="today-note" maxlength="500" placeholder="只保存在本机，不要填写证件号或银行卡信息">${esc(state.notes.today)}</textarea></label><label class="field" style="margin-top:10px">临时备注<textarea id="temporary-note" maxlength="1000" placeholder="记录临时变更；不要填写敏感信息">${esc(state.notes.temporary)}</textarea></label><button class="button primary" type="button" id="save-notes" style="margin-top:10px">保存备注</button></article>
+        <article class="card"><p class="eyebrow">Private storage</p><h3>📂 Document Center</h3><p class="card-subtitle">PDF、PNG、JPG 通过登录后访问的 Supabase Private Bucket 保存，不进入 GitHub Pages 文件。</p><div class="card-actions"><button class="button small" type="button" data-go="documents">打开资料中心</button></div></article>
+        <article class="card"><p class="eyebrow">Session notes</p><h3>当前页面备注</h3><label class="field">今日提醒<textarea id="today-note" maxlength="500" placeholder="关闭或刷新页面后消失；不要填写敏感信息">${esc(state.notes.today)}</textarea></label><label class="field" style="margin-top:10px">临时备注<textarea id="temporary-note" maxlength="1000" placeholder="仅保留在当前页面内存">${esc(state.notes.temporary)}</textarea></label><button class="button primary" type="button" id="save-notes" style="margin-top:10px">暂存备注</button></article>
         <article class="card"><p class="eyebrow">Shared checklist</p><h3>共享身份与同步</h3><label class="field">这台手机的显示名称<input id="sync-user-name" maxlength="64" value="${esc(state.syncUserName || (checklistSync.userName === "TBD" ? "" : checklistSync.userName))}" placeholder="例如：张微明"></label><button class="button primary" type="button" id="save-sync-user" style="margin-top:10px">保存显示名称</button><p class="card-subtitle"><span id="sync-status-detail">${esc(syncStatusLabel())}</span><br>最后同步：<span id="last-synced-time">${esc(formatLastSynced(state.lastSyncedAt))}</span><br>仅 completed、completed_by、updated_at 进入云端。</p></article>
         <article class="card"><p class="eyebrow">Flight status</p><h3>航班实际状态</h3><div class="edit-list">${DATA.flights.map((flight) => { const local = state.flights[flight.id] || {}; return `<label class="edit-item"><strong>${esc(flight.flightNumber)} · ${esc(flight.date)}</strong><select class="field" data-flight="${esc(flight.id)}" data-field="actualStatus">${ACTUAL_FLIGHT_STATUSES.map((value) => `<option ${value === (local.actualStatus || flight.actualStatus) ? "selected" : ""}>${esc(value)}</option>`).join("")}</select><select class="field" style="margin-top:7px" data-flight="${esc(flight.id)}" data-field="status">${STATUSES.map((value) => `<option value="${value}" ${value === (local.status || flight.status) ? "selected" : ""}>${esc(labels[value])}</option>`).join("")}</select></label>`; }).join("")}</div></article>
         <article class="card"><p class="eyebrow">Hotel status</p><h3>酒店确认状态</h3><div class="edit-list">${DATA.hotels.map((hotel) => { const local = state.hotels[hotel.id] || {}; return `<label class="edit-item"><strong>${esc(hotel.nameZh)}</strong><select class="field" data-hotel="${esc(hotel.id)}" data-field="status">${STATUSES.map((value) => `<option value="${value}" ${value === (local.status || hotel.status) ? "selected" : ""}>${esc(labels[value])}</option>`).join("")}</select></label>`; }).join("")}</div></article>
         <article class="card"><p class="eyebrow">Local data</p><h3>本机修改数据</h3><p class="card-subtitle">基础版本：${esc(DATA.meta.version)}<br>本机修改：${esc(formatUpdated(state.updatedAt))}</p><div class="card-actions"><button class="button small" type="button" id="export-all">导出JSON</button><button class="button small" type="button" id="import-all">从JSON导入</button><button class="button small danger" type="button" id="reset-all">恢复基础数据</button></div></article>
-        <article class="card"><p class="eyebrow">Privacy</p><h3>不可进入公开页面</h3><ul class="privacy-list"><li>护照、身份证照片与完整号码</li><li>银行卡号、支付密码与CVV</li><li>完整预订编号和私人订单PDF</li><li>API Key、保险保单原件与二维码</li></ul><p class="card-subtitle">敏感文件继续保存在私密iCloud目录，不进入项目或公开GitHub Pages。</p></article>
+        <article class="card"><p class="eyebrow">Privacy</p><h3>不可进入 Git 仓库</h3><ul class="privacy-list"><li>护照、身份证照片与完整号码</li><li>银行卡号、支付密码与CVV</li><li>完整预订编号和私人订单PDF</li><li>secret / service_role key 与长期文件链接</li></ul><p class="card-subtitle">私人原件仅进入 iCloud 私人层或登录保护的 Supabase Private Bucket；页面只生成短时 signed URL。</p></article>
       </div>
     `;
   }
@@ -648,6 +839,7 @@
     renderChecklist();
     renderBudget();
     renderMore();
+    renderDocuments();
   }
 
   function switchView(name, scroll) {
@@ -662,6 +854,7 @@
       if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     });
     if (scroll !== false) window.scrollTo({ top: 0, behavior: "smooth" });
+    if (name === "documents" && documentService.authenticated && !documentsLoading && !privateDocuments.length) loadPrivateDocuments();
   }
 
   function handleClick(event) {
@@ -669,6 +862,10 @@
     if (nav) return switchView(nav.dataset.view);
     const go = event.target.closest("[data-go]");
     if (go) return switchView(go.dataset.go);
+    const openDocument = event.target.closest("[data-document-open]");
+    if (openDocument) return openPrivateDocument(openDocument.dataset.documentOpen);
+    const deleteDocument = event.target.closest("[data-document-delete]");
+    if (deleteDocument) return deletePrivateDocument(deleteDocument.dataset.documentDelete);
     const copy = event.target.closest("[data-copy]");
     if (copy) return copyText(copy.dataset.copy);
     if (event.target.id === "jump-today") return $(".day-card.today")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -678,12 +875,19 @@
     if (event.target.id === "import-checklist") return chooseImport("checklist");
     if (event.target.id === "save-notes") return saveNotes();
     if (event.target.id === "save-sync-user") return saveSyncUserName();
+    if (event.target.id === "refresh-documents") return loadPrivateDocuments();
+    if (event.target.id === "document-logout") return resetPrivateSession("已退出私人资料层");
     if (event.target.id === "export-all") { download("malaysia-bali-local-overrides.json", storage.export()); showToast("本机修改已导出"); return; }
     if (event.target.id === "import-all") return chooseImport("all");
     if (event.target.id === "reset-all") return resetAll();
   }
 
   function handleChange(event) {
+    if (event.target.id === "document-category") {
+      const related = $("#document-related");
+      if (related) related.innerHTML = relatedOptions(event.target.value);
+      return;
+    }
     const task = event.target.dataset.task;
     if (task) { event.target.disabled = true; updateChecklistTask(task, event.target.checked); return; }
     const assignee = event.target.dataset.assignee;
@@ -700,6 +904,90 @@
     if (flight) { state.flights[flight] ||= {}; state.flights[flight][event.target.dataset.field] = event.target.value; save(); renderBookings(); renderMore(); showToast("航班状态已更新"); return; }
     const hotel = event.target.dataset.hotel;
     if (hotel) { state.hotels[hotel] ||= {}; state.hotels[hotel][event.target.dataset.field] = event.target.value; save(); renderBookings(); renderMore(); showToast("酒店状态已更新"); }
+  }
+
+  async function handleSubmit(event) {
+    if (event.target.id === "document-login") {
+      event.preventDefault();
+      const button = event.target.querySelector("button[type=submit]");
+      button.disabled = true;
+      try {
+        const form = new FormData(event.target);
+        await documentService.signIn(form.get("email"), form.get("password"));
+        showToast("私人资料层登录成功");
+        await loadPrivateDocuments();
+      } catch (error) {
+        showToast(error.message || "登录失败");
+        button.disabled = false;
+      }
+      return;
+    }
+    if (event.target.id === "document-upload") {
+      event.preventDefault();
+      const button = event.target.querySelector("button[type=submit]");
+      const runVersion = privateRequestVersion;
+      button.disabled = true;
+      pendingPrivateUploads += 1;
+      try {
+        const form = new FormData(event.target);
+        await documentService.upload({
+          category: form.get("category"),
+          title: form.get("title"),
+          relatedItemId: form.get("relatedItemId"),
+          file: form.get("file")
+        });
+        showToast("文件已保存到私人 Bucket");
+        if (runVersion === privateRequestVersion) await loadPrivateDocuments();
+      } catch (error) {
+        if (runVersion === privateRequestVersion) {
+          showToast(error.message || "文件上传失败");
+          button.disabled = false;
+        }
+      } finally {
+        if (runVersion === privateRequestVersion) pendingPrivateUploads = Math.max(0, pendingPrivateUploads - 1);
+      }
+    }
+  }
+
+  async function openPrivateDocument(id) {
+    const item = privateDocuments.find((document) => document.id === id);
+    if (!item) return showToast("文件记录不存在");
+    selectedPrivateDocument = item;
+    const target = window.open("about:blank", "_blank");
+    try {
+      const url = await documentService.signedUrl(item);
+      if (target) { target.opener = null; target.location = url; }
+      else window.location.href = url;
+    } catch (error) {
+      target?.close();
+      showToast(error.message || "文件打开失败");
+    } finally {
+      selectedPrivateDocument = null;
+    }
+  }
+
+  async function deletePrivateDocument(id) {
+    const item = privateDocuments.find((document) => document.id === id);
+    if (!item) return;
+    if (!documentService.canDelete(item)) return showToast("当前账号无权删除此文件");
+    if (!window.confirm(`确认永久删除“${item.title}”？此操作不可恢复。`)) return;
+    try {
+      await documentService.remove(item);
+      incompleteDeletes.delete(id);
+      privateDocuments = privateDocuments.filter((document) => document.id !== id);
+      renderHome();
+      renderBookings();
+      renderDocuments();
+      showToast("私人文件已删除");
+    } catch (error) {
+      if (error.storageRemoved) {
+        incompleteDeletes.add(id);
+        renderHome();
+        renderBookings();
+        renderDocuments();
+      }
+      showToast(error.storageRemoved ? "删除未完成，可重试" : (error.message || "删除失败"));
+    }
   }
 
   async function copyText(text) {
@@ -725,10 +1013,9 @@
   function saveNotes() {
     state.notes.today = $("#today-note").value.trim();
     state.notes.temporary = $("#temporary-note").value.trim();
-    save();
     renderHome();
     renderMore();
-    showToast("备注已保存在本机");
+    showToast("备注仅保留在当前页面");
   }
 
   function saveSyncUserName() {
@@ -787,6 +1074,31 @@
     showToast("已恢复基础数据");
   }
 
+  function verifyPrivateSession() {
+    if (!documentService.hasSession) {
+      if (privateDocuments.length || selectedPrivateDocument) return resetPrivateSession("登录已失效，请重新登录");
+      return Promise.resolve(null);
+    }
+    if (privateSessionRun) return privateSessionRun;
+    privateRequestVersion += 1;
+    privateSessionChecking = true;
+    privateDocuments = [];
+    selectedPrivateDocument = null;
+    documentsLoading = false;
+    documentsRun = null;
+    renderAll();
+    const run = documentService.getSession().then((session) => {
+      if (!session) return resetPrivateSession("登录已失效，请重新登录");
+      privateSessionChecking = false;
+      renderAll();
+      return loadPrivateDocuments();
+    }).catch(() => null).finally(() => {
+      if (privateSessionRun === run) privateSessionRun = null;
+    });
+    privateSessionRun = run;
+    return run;
+  }
+
   function setupNetwork() {
     const banner = $("#offline-banner");
     const update = () => {
@@ -798,6 +1110,14 @@
     };
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
+    window.addEventListener("focus", verifyPrivateSession);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        selectedPrivateDocument = null;
+        documentService.clearSignedUrls();
+        revokeGeneratedObjectUrls();
+      } else verifyPrivateSession();
+    });
     update();
 
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
@@ -824,9 +1144,11 @@
     renderAll();
     document.addEventListener("click", handleClick);
     document.addEventListener("change", handleChange);
+    document.addEventListener("submit", handleSubmit);
     $("#import-file").addEventListener("change", handleImport);
     setupNetwork();
     switchView("home", false);
+    if (documentService.hasSession) verifyPrivateSession();
   }
 
   try {
