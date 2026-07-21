@@ -12,6 +12,7 @@
   const ACTUAL_FLIGHT_STATUSES = ["等待确认", "正常", "延误", "取消", "已完成"];
   const ITINERARY_PERIODS = [["morning", "上午"], ["noon", "中午"], ["afternoon", "下午"], ["evening", "晚上"]];
   const EXPENSE_CATEGORIES = { flight: "机票", hotel: "酒店", transport: "交通", food: "餐饮", sea: "出海", attractions: "景点", insurance: "保险", connectivity: "通信", shopping: "购物", other: "其他" };
+  const QUICK_EXPENSE_CATEGORIES = ["flight", "hotel", "transport", "food", "sea", "attractions", "other"];
   const EXPENSE_STATUSES = { paid: "已支付", pending: "待支付", refunded: "已退款" };
   const EXPENSE_SPLITS = { shared: "共同费用", personal: "个人费用" };
   const EXPENSE_CURRENCIES = ["CNY", "MYR", "IDR", "USD"];
@@ -613,6 +614,7 @@
     const nextAction = L.nextItineraryEvent(focusDay);
     const todayExpenses = (sharedSnapshot.expenses || []).filter((expense) => expense.incurredOn === focusDay.date);
     const expenseTotals = L.expenseLedgerTotals(todayExpenses);
+    const recentChanges = L.recentSharedChanges(sharedSnapshot.itineraryOverrides, sharedSnapshot.expenses);
     const documents = documentCounts();
     const sync = commandSyncState();
     const connected = Math.min(2, sharedSnapshot.members.length);
@@ -647,9 +649,12 @@
         return `<article class="card command-expense-currency"><span>${currency}</span><strong>${esc(L.formatExpenseAmount(spending, currency))}</strong><small>已付 ${esc(L.formatExpenseAmount(values.paid, currency))}<br>待付 ${esc(L.formatExpenseAmount(values.pending, currency))} · 退款 ${esc(L.formatExpenseAmount(values.refunded, currency))}</small></article>`;
       }).join("")}</div>
 
+      <div class="section-head"><div><p class="eyebrow">Recent Changes</p><h2>最近修改</h2></div><p>${recentChanges.length}项</p></div>
+      <article class="card">${recentChanges.length ? `<div class="today-list">${recentChanges.map((change) => `<div class="today-row"><span>${esc(change.type)}</span><div><strong>${esc(change.title)}</strong><small>${esc(formatUpdated(change.updatedAt))}</small></div></div>`).join("")}</div>` : '<p class="empty">暂无共享修改</p>'}</article>
+
       <div class="section-head"><div><p class="eyebrow">Quick Actions</p><h2>快速操作</h2></div></div>
       <div class="command-quick-actions">
-        <button class="button command-action" type="button" data-command-itinerary="${esc(focusDay.id)}" ${writesDisabled ? "disabled" : ""}><strong>调整行程</strong><small>Day ${esc(dayNumber)}</small></button>
+        <button class="button command-action" type="button" data-command-itinerary="${esc(focusDay.id)}" ${writesDisabled ? "disabled" : ""}><strong>编辑今日行程</strong><small>Day ${esc(dayNumber)}</small></button>
         <button class="button command-action" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}><strong>记一笔</strong><small>共享费用</small></button>
         <button class="button command-action" type="button" data-command-upload ${writesDisabled ? "disabled" : ""}><strong>上传资料</strong><small>${documentsLoading ? "读取中" : `${esc(documents.total)}份文件`}</small></button>
         <button class="button command-action" type="button" data-go="documents"><strong>文件中心</strong><small>Private Bucket</small></button>
@@ -779,7 +784,7 @@
     const canEdit = documentService.authenticated && sharedDataService.configured && Boolean(sharedSnapshot);
     const editDay = itinerary.find((day) => day.id === itineraryEdit?.value.dayId) || current || itinerary[0];
     const editButton = canEdit && editDay
-      ? `<button class="button primary" type="button" data-command-itinerary="${esc(editDay.id)}">${itineraryEdit ? "继续编辑" : current ? "编辑今天" : "编辑首日"}</button>`
+      ? `<button class="button primary" type="button" data-command-itinerary="${esc(editDay.id)}">${itineraryEdit ? "继续编辑" : current ? "编辑今日行程" : "编辑首日行程"}</button>`
       : "";
     const refreshButton = documentService.authenticated && sharedDataService.configured
       ? `<button class="button" type="button" id="refresh-itinerary" ${sharedDataLoading ? "disabled" : ""}>${sharedDataLoading ? "正在同步" : "刷新共享行程"}</button>`
@@ -1110,6 +1115,7 @@
       <div class="expense-form-title"><div><p class="eyebrow">Ledger entry</p><h3>${esc(editLabel)}</h3></div></div>
       ${expenseConflict ? '<article class="alert critical"><div><h3>这笔费用已有更新</h3><p>当前草稿仍保留。请取消后重新打开最新版本；若为幂等冲突，请取消后新建。</p></div></article>' : ""}
       <fieldset class="expense-form-fields" ${expenseSaving ? "disabled" : ""}>
+        <div class="card-actions" role="group" aria-label="快速分类">${QUICK_EXPENSE_CATEGORIES.map((category) => `<button class="button small ${category === value.category ? "primary" : ""}" type="button" data-expense-category="${category}">${esc(EXPENSE_CATEGORIES[category])}</button>`).join("")}</div>
         <div class="field-grid">
           <label class="field">费用名称<input name="title" maxlength="160" value="${esc(value.title)}" required></label>
           <label class="field">分类<select name="category" required>${Object.entries(EXPENSE_CATEGORIES).map(([category, label]) => `<option value="${category}" ${category === value.category ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
@@ -1357,6 +1363,13 @@
     if (event.target.closest("[data-command-refresh]")) {
       if (navigator.onLine === false) return showToast("当前离线，只能查看已有数据");
       return Promise.all([loadSharedSnapshot(true), loadPrivateDocuments()]);
+    }
+    const expenseCategory = event.target.closest("[data-expense-category]");
+    if (expenseCategory && expenseEdit) {
+      expenseEdit.value = { ...expenseEdit.value, category: expenseCategory.dataset.expenseCategory };
+      renderBudget();
+      $("#expense-ledger-form input[name=amount]")?.focus();
+      return;
     }
     if (event.target.closest("[data-expense-create]")) return startExpenseCreate();
     const editExpense = event.target.closest("[data-expense-edit]");

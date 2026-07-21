@@ -74,7 +74,7 @@ assert.match(app, /await sharedDataService\.saveItineraryOverride[\s\S]*itinerar
 assert.match(app, /error\?\.code === "CONFLICT"[\s\S]*loadSharedSnapshot\(true\)/, "revision 冲突未提示并刷新 snapshot");
 assert.match(app, /if \(!documentService\.authenticated\) return showToast\("登录后才能编辑共享行程"\)/, "未登录写入缺少 UI guard");
 assert.match(itineraryView, /data-command-itinerary=/, "行程页头缺少直接编辑入口");
-assert.match(itineraryView, /继续编辑[\s\S]*编辑今天[\s\S]*编辑首日/, "行程编辑入口未反映当前编辑或旅行日期状态");
+assert.match(itineraryView, /继续编辑[\s\S]*编辑今日行程[\s\S]*编辑首日行程/, "行程编辑入口未反映当前编辑或旅行日期状态");
 assert.match(app, /data-itinerary-root-field="theme"/, "行程编辑器缺少 theme 字段");
 assert.match(app, /data-itinerary-root-field="status"/, "行程编辑器缺少 status 字段");
 assert.match(app, /status === "pending" \? "planned" : status/, "planned 未兼容数据库既有 pending 状态");

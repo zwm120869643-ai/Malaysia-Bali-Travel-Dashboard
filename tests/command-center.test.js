@@ -47,6 +47,11 @@ const expenses = [
 ];
 const todayTotals = L.expenseLedgerTotals(expenses.filter((expense) => expense.incurredOn === day.date));
 assert.deepEqual(todayTotals.CNY, { paid: 1000, pending: 500, refunded: 0 }, "首页今日费用混入其他日期");
+const recent = L.recentSharedChanges(
+  [{ theme: "较早行程", updatedAt: "2026-07-21T08:00:00Z" }],
+  [{ title: "最新费用", updatedAt: "2026-07-21T09:00:00Z" }]
+);
+assert.deepEqual(recent.map((item) => [item.type, item.title]), [["费用", "最新费用"], ["行程", "较早行程"]], "最近修改未按时间排序");
 
 const app = fs.readFileSync("js/app.js", "utf8");
 const css = fs.readFileSync("styles.css", "utf8");
@@ -59,6 +64,8 @@ assert.match(app, /<article class="hero"/, "Public Mode 原首页被移除");
 assert.match(app, /const itinerary = itineraryDays\(\);[\s\S]*L\.itineraryTimeline\(focusDay\)/, "首页未读取合并行程");
 assert.match(app, /expense\.incurredOn === focusDay\.date/, "首页费用未限定当天");
 assert.match(app, /const documents = documentCounts\(\)/, "首页未读取 Document Center 状态");
+assert.match(app, /<h2>最近修改<\/h2>/, "Command Center 缺少最近修改");
+assert.match(app, /<strong>编辑今日行程<\/strong>/, "首页缺少编辑今日行程入口");
 for (const action of ["data-command-itinerary", "data-command-expense", "data-command-upload", 'data-go="documents"']) {
   assert.match(app, new RegExp(action), `Quick Action 缺失: ${action}`);
 }

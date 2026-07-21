@@ -74,7 +74,7 @@ function gitReleaseGate() {
   const version = vm.runInContext("CACHE_VERSION", context);
   const cacheName = vm.runInContext("CACHE", context);
   const shell = JSON.parse(vm.runInContext("JSON.stringify(SHELL)", context));
-  assert.equal(version, "v1.5.2.1", "Service Worker 缓存版本错误");
+  assert.equal(version, "v1.5.3", "Service Worker 缓存版本错误");
   assert.ok(shell.includes("./js/shared-data.js"), "shared-data.js 未进入应用壳缓存");
   shell.forEach((file) => assert.ok(fs.existsSync(path.join(ROOT, file.replace(/^\.\//, ""))), `缓存文件缺失: ${file}`));
 
@@ -82,13 +82,13 @@ function gitReleaseGate() {
   listeners.install({ waitUntil(run) { installRun = run; } });
   await installRun;
   assert.equal(skipWaitingCalls, 1, "新 Service Worker 未立即进入等待切换流程");
-  assert.deepEqual([...stores.get(cacheName).keys()].sort(), [...shell].sort(), "v1.5.2.1 应用壳缓存不完整");
+  assert.deepEqual([...stores.get(cacheName).keys()].sort(), [...shell].sort(), "v1.5.3 应用壳缓存不完整");
 
   let activateRun;
   listeners.activate({ waitUntil(run) { activateRun = run; } });
   await activateRun;
   assert.equal(stores.has("malaysia-bali-dashboard-v1.5.0"), false, "v1.5.0 缓存未删除");
-  assert.equal(stores.has(cacheName), true, "v1.5.2.1 缓存被误删");
+  assert.equal(stores.has(cacheName), true, "v1.5.3 缓存被误删");
   assert.equal(stores.has("unrelated-cache"), true, "非本应用缓存被误删");
   assert.equal(claimCalls, 1, "新 Service Worker 未接管现有页面");
 
@@ -109,5 +109,5 @@ function gitReleaseGate() {
   assert.equal(cacheCalls, beforePrivate, "私有 API 触发了 Cache API");
 
   if (process.argv.includes("--release")) gitReleaseGate();
-  console.log(`v1.5.2.1 release candidate: ok${process.argv.includes("--release") ? " (Git ready)" : ""}`);
+  console.log(`v1.5.3 release candidate: ok${process.argv.includes("--release") ? " (Git ready)" : ""}`);
 })().catch((error) => { console.error(error); process.exitCode = 1; });

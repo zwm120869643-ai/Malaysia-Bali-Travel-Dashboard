@@ -221,6 +221,17 @@
     }) || null;
   }
 
+  function recentSharedChanges(itineraryOverrides, expenses, limit) {
+    const count = Number.isSafeInteger(limit) && limit >= 0 ? limit : 3;
+    return [
+      ...(itineraryOverrides || []).map((item) => ({ type: "行程", title: item.theme, updatedAt: item.updatedAt })),
+      ...(expenses || []).map((item) => ({ type: "费用", title: item.title, updatedAt: item.updatedAt }))
+    ]
+      .filter((item) => item.title && Number.isFinite(Date.parse(item.updatedAt)))
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+      .slice(0, count);
+  }
+
   function parseExpenseAmount(value) {
     const text = String(value ?? "").trim();
     if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(text)) return null;
@@ -254,5 +265,5 @@
     return Boolean(role && (expense?.createdBy === currentUserId || role === "owner"));
   }
 
-  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
+  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
 })(typeof window !== "undefined" ? window : globalThis);

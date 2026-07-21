@@ -59,6 +59,9 @@ assert.match(app, /updateExpense\(expenseEdit\.id, payload, expenseEdit\.revisio
 assert.match(app, /deleteExpense\(expense\.id, expense\.revision\)/, "删除未携带 revision");
 assert.match(app, /canDeleteExpense\(expense, sharedSnapshot\.currentUserId, sharedSnapshot\.members\)/, "删除 UI 未检查创建者或 Owner");
 assert.match(app, /\["CONFLICT", "IDEMPOTENCY_CONFLICT"\]/, "费用冲突提示流程缺失");
+for (const category of ["flight", "hotel", "transport", "food", "sea", "attractions", "other"]) {
+  assert.match(app, new RegExp(`data-expense-category="\\$\\{category\\}"`), `快速分类缺少 ${category}`);
+}
 for (const name of ["title", "category", "amount", "currency", "incurredOn", "paidByUserId", "splitMode", "paymentStatus", "note"]) {
   assert.match(app, new RegExp(`name="${name}"`), `费用表单缺少字段 ${name}`);
 }
