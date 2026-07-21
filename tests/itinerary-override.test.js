@@ -83,6 +83,11 @@ for (const value of ["OD306", "2026-07-22", "09:00", "Kuala Lumpur → Bali", "1
   assert.match(flightPreset, new RegExp(value), `OD306 快捷输入缺少 ${value}`);
 }
 assert.match(flightPreset, /status: "confirmed"/, "OD306 快捷输入未设为 confirmed");
+for (const template of ["sea", "hotel", "transport"]) {
+  assert.match(app, new RegExp(`data-itinerary-template="\\$\\{name\\}"`), `活动模板入口缺少 ${template}`);
+}
+for (const value of ["出海 / 浮潜", "办理酒店入住", "前往下一目的地"]) assert.match(app, new RegExp(value), `活动模板内容缺少 ${value}`);
+assert.match(app, /applyActivityTemplate\(itineraryTemplate\.dataset\.itineraryTemplate\)/, "活动模板未接入编辑器");
 assert.ok(cancelEdit, "缺少取消编辑流程");
 assert.doesNotMatch(cancelEdit, /sharedDataService|saveItineraryOverride/, "取消编辑触发了云端写入");
 assert.doesNotMatch(persisted, /itinerary|override|snapshot/i, "共享行程进入 localStorage 白名单");

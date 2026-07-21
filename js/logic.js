@@ -241,20 +241,56 @@
   function nextTravelAction(day, flights, hotels, now) {
     const reference = now || new Date();
     const flight = nextActiveFlight(flights, reference);
-    if (flight && daysBetween(dateKey(reference), flight.date) <= 1) return {
-      type: "航班",
-      id: flight.id,
-      timeLabel: `${formatDate(flight.date, { month: "numeric", day: "numeric" })} ${flight.departureTime}`,
-      title: `${flight.flightNumber} · ${flight.departureTime} → ${flight.arrivalTime}`,
-      location: `${flight.departureAirport} → ${flight.arrivalAirport}`
-    };
+    if (flight && daysBetween(dateKey(reference), flight.date) <= 1) {
+      const departure = travelDateTime(flight.date, flight.departureTime);
+      return {
+        type: "航班",
+        id: flight.id,
+        at: departure?.getTime() ?? null,
+        timeLabel: `${formatDate(flight.date, { month: "numeric", day: "numeric" })} ${flight.departureTime}`,
+        title: `${flight.flightNumber} · ${flight.departureTime} → ${flight.arrivalTime}`,
+        location: `${flight.departureAirport} → ${flight.arrivalAirport}`
+      };
+    }
     const hotel = (hotels || [])
       .filter((item) => item.status !== "cancelled" && item.checkIn <= day?.date && item.checkOut >= day?.date)
       .sort((a, b) => b.checkIn.localeCompare(a.checkIn))[0];
     if (hotel) return { type: "酒店", id: hotel.id, timeLabel: hotel.checkOut === day.date ? "退房" : "住宿", title: hotel.nameZh || hotel.name, location: hotel.address || day.city };
     if (String(day?.transport || "").trim()) return { type: "交通", id: "transport", timeLabel: "待定", title: day.transport, location: day.city };
     const itinerary = nextItineraryEvent(day, reference);
-    return itinerary ? { ...itinerary, type: "行程", title: itinerary.text, location: day.city } : null;
+    return itinerary ? { ...itinerary, type: "行程", at: travelDateTime(day.date, itinerary.time)?.getTime() ?? null, title: itinerary.text, location: day.city } : null;
+  }
+
+  function travelCountdown(target, now) {
+    if (target === null || target === "") return "时间待确认";
+    const at = Number(target);
+    if (!Number.isFinite(at)) return "时间待确认";
+    const minutes = Math.max(0, Math.ceil((at - (now || new Date()).getTime()) / 60000));
+    if (!minutes) return "现在";
+    const days = Math.floor(minutes / 1440);
+    const hours = Math.floor((minutes % 1440) / 60);
+    const remaining = minutes % 60;
+    if (days) return `${days}天${hours ? `${hours}小时` : ""}`;
+    if (hours) return `${hours}小时${remaining ? `${remaining}分` : ""}`;
+    return `${remaining}分`;
+  }
+
+  function travelTimeline(itinerary, now, limit) {
+    const reference = now || new Date();
+    const today = dateKey(reference);
+    const count = Number.isSafeInteger(limit) && limit >= 0 ? limit : 8;
+    return (itinerary || [])
+      .flatMap((day) => itineraryTimeline(day).map((item, order) => ({
+        ...item,
+        dayId: day.id,
+        date: day.date,
+        dateLabel: formatDate(day.date, { month: "numeric", day: "numeric" }),
+        at: travelDateTime(day.date, item.time)?.getTime() ?? null,
+        order
+      })))
+      .filter((item) => item.date > today || (item.date === today && (item.at === null || item.at >= reference.getTime())))
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.at ?? Infinity) - (b.at ?? Infinity) || a.order - b.order)
+      .slice(0, count);
   }
 
   function recentSharedChanges(itineraryOverrides, expenses, limit) {
@@ -301,5 +337,5 @@
     return Boolean(role && (expense?.createdBy === currentUserId || role === "owner"));
   }
 
-  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, nextActiveFlight, nextTravelAction, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
+  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, nextActiveFlight, nextTravelAction, travelCountdown, travelTimeline, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
 })(typeof window !== "undefined" ? window : globalThis);

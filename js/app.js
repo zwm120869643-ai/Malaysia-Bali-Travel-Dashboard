@@ -11,6 +11,11 @@
   const STATUSES = ["pending", "confirmed", "changed", "cancelled"];
   const ACTUAL_FLIGHT_STATUSES = ["等待确认", "正常", "延误", "取消", "已完成"];
   const ITINERARY_PERIODS = [["morning", "上午"], ["noon", "中午"], ["afternoon", "下午"], ["evening", "晚上"]];
+  const ITINERARY_ACTIVITY_TEMPLATES = {
+    sea: { label: "出海", period: "morning", text: "出海 / 浮潜" },
+    hotel: { label: "酒店", period: "afternoon", text: "办理酒店入住" },
+    transport: { label: "交通", period: "morning", text: "前往下一目的地" }
+  };
   const EXPENSE_CATEGORIES = { flight: "机票", hotel: "酒店", transport: "交通", food: "餐饮", sea: "出海", attractions: "景点", insurance: "保险", connectivity: "通信", shopping: "购物", other: "其他" };
   const QUICK_EXPENSE_CATEGORIES = ["flight", "hotel", "transport", "food", "sea", "attractions", "other"];
   const EXPENSE_STATUSES = { paid: "已支付", pending: "待支付", refunded: "已退款" };
@@ -194,6 +199,7 @@
   const esc = (value) => String(value ?? "TBD").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const display = (value, fallback) => value === null || value === undefined || value === "" ? (fallback || "TBD") : value;
   const statusTag = (status) => `<span class="status ${esc(status)}">${esc(labels[status] || status || "pending")}</span>`;
+  const flightActualTag = (status) => `<span class="status ${status === "正常" || status === "已完成" ? "confirmed" : status === "延误" ? "changed" : status === "取消" ? "cancelled" : "pending"}">${esc(status)}</span>`;
   const mapUrl = (provider, query) => provider === "apple"
     ? `https://maps.apple.com/?q=${encodeURIComponent(query)}`
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
@@ -614,13 +620,19 @@
     };
   }
 
+  function updateTravelCountdown() {
+    const countdown = $("#next-action-countdown");
+    if (!countdown) return;
+    countdown.textContent = L.travelCountdown(countdown.dataset.nextAt ? Number(countdown.dataset.nextAt) : null);
+  }
+
   function renderCommandCenter() {
     const itinerary = itineraryDays();
     const trip = L.tripMoment(DATA.meta);
     const current = L.currentItinerary(itinerary);
     const focusDay = current || (trip.phase === "upcoming" ? itinerary[0] : itinerary.at(-1));
     const dayNumber = Math.max(1, itinerary.findIndex((day) => day.id === focusDay.id) + 1);
-    const timeline = L.itineraryTimeline(focusDay);
+    const timeline = L.travelTimeline(itinerary, new Date(), 8);
     const live = liveTravelState(focusDay);
     const nextAction = live.nextAction;
     const todayExpenses = (sharedSnapshot.expenses || []).filter((expense) => expense.incurredOn === focusDay.date);
@@ -633,11 +645,11 @@
 
     $("#view-home").innerHTML = `<div class="command-center">
       <header class="command-header">
-        <div class="command-header-top"><span class="command-private-label">Realtime Travel Status</span><span class="command-sync-chip ${sync.key}" role="status" aria-live="polite">${esc(sync.label)}</span></div>
-        <p class="eyebrow">Current trip · ${esc(phaseLabel)}</p>
+        <div class="command-header-top"><span class="command-private-label">Travel Day Mode · Realtime Travel Status</span><span class="command-sync-chip ${sync.key}" role="status" aria-live="polite">${esc(sync.label)}</span></div>
+        <p class="eyebrow">今日模式 · ${esc(L.formatDate(focusDay.date, { month: "numeric", day: "numeric", weekday: "short" }))} · ${esc(phaseLabel)}</p>
         <h1>${esc(DATA.meta.title)}</h1>
         <div class="command-travel-meta">
-          <div><span>当前有效航班</span><strong>${esc(live.flight?.flightNumber || "暂无")}</strong><small>${live.flight ? `${esc(live.flight.date)} ${esc(live.flight.departureTime)} → ${esc(live.flight.arrivalTime)} · ${esc(live.flight.actualStatus)}` : "等待后续航段"}</small></div>
+          <div><span>当前有效航班</span><strong>${esc(live.flight?.flightNumber || "暂无")}</strong><small>${live.flight ? `${esc(live.flight.date)} ${esc(live.flight.departureTime)} → ${esc(live.flight.arrivalTime)} · ${esc(labels[live.flight.status] || live.flight.status)} / ${esc(live.flight.actualStatus)}` : "等待后续航段"}</small></div>
           <div><span>当前住宿</span><strong>${esc(live.hotel?.nameZh || "待确认")}</strong><small>${live.hotel ? `${esc(live.hotel.checkIn)} → ${esc(live.hotel.checkOut)}` : esc(focusDay.theme)}</small></div>
           <div><span>当前交通</span><strong>Day ${esc(dayNumber)} · ${esc(focusDay.city)}</strong><small>${esc(focusDay.transport)}</small></div>
         </div>
@@ -646,11 +658,11 @@
       <div class="section-head"><div><p class="eyebrow">Next Action</p><h2>下一步</h2></div><p>${esc(focusDay.city)}</p></div>
       <article class="card command-next-action">
         <div class="command-next-time"><span>时间</span><strong>${esc(nextAction?.timeLabel || "待定")}</strong></div>
-        <div><p class="eyebrow">${esc(nextAction?.type || "下一事件")}</p><h3>${esc(nextAction?.title || "今日已无后续安排")}</h3><p class="command-location">地点 · ${esc(nextAction?.location || focusDay.city)}</p></div>
+        <div><p class="eyebrow">${esc(nextAction?.type || "下一事件")}</p><h3>${esc(nextAction?.title || "今日已无后续安排")}</h3><p class="command-location">地点 · ${esc(nextAction?.location || focusDay.city)}</p><p class="command-countdown">下一事件倒计时 · <strong id="next-action-countdown" data-next-at="${esc(nextAction?.at ?? "")}">${esc(L.travelCountdown(nextAction?.at))}</strong></p><div class="card-actions"><button class="button small primary" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}>快速记账</button></div></div>
       </article>
 
-      <div class="section-head"><div><p class="eyebrow">Today Timeline</p><h2>今日行程</h2></div><p>${timeline.length}项</p></div>
-      <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${nextAction?.type === "行程" && item.id === nextAction.id ? "next" : ""}"><time>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(commandPeriodLabel(item.period))}</small></div></div>`).join("") : '<p class="empty">今天暂无活动</p>'}</div>
+      <div class="section-head"><div><p class="eyebrow">Trip Timeline</p><h2>旅行时间轴</h2></div><p>${timeline.length}项</p></div>
+      <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${nextAction?.type === "行程" && item.id === nextAction.id ? "next" : ""}"><time>${esc(item.dateLabel)}<br>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(commandPeriodLabel(item.period))}</small></div></div>`).join("") : '<p class="empty">暂无后续活动</p>'}</div>
 
       <div class="section-head"><div><p class="eyebrow">Expense Snapshot</p><h2>今日费用</h2></div><p>${todayExpenses.length}笔 · 不换汇</p></div>
       <div class="command-expense-snapshot">${EXPENSE_CURRENCIES.map((currency) => {
@@ -845,6 +857,7 @@
       <fieldset class="itinerary-editor-fields" ${itinerarySaving ? "disabled" : ""}>
         <div class="field-grid"><label class="field">主题<input maxlength="160" value="${esc(value.theme)}" data-itinerary-root-field="theme" required></label><label class="field">状态<select data-itinerary-root-field="status">${STATUSES.map((status) => `<option value="${status}" ${status === value.status ? "selected" : ""}>${status === "pending" ? "planned" : status}</option>`).join("")}</select></label></div>
         ${value.travelDate === "2026-07-22" ? '<div class="card-actions"><button class="button small" type="button" data-itinerary-preset="od306">填入 OD306 航班变更</button></div>' : ""}
+        <div class="card-actions" role="group" aria-label="活动模板"><span class="muted">活动模板</span>${Object.entries(ITINERARY_ACTIVITY_TEMPLATES).map(([name, template]) => `<button class="button small ghost" type="button" data-itinerary-template="${name}">${esc(template.label)}</button>`).join("")}</div>
         <label class="field">交通摘要<textarea maxlength="1000" data-itinerary-root-field="transport">${esc(value.transport)}</textarea></label>
         ${periods}
         <label class="field">注意事项（每行一项）<textarea maxlength="10019" data-itinerary-notes>${esc(value.notes.join("\n"))}</textarea></label>
@@ -871,13 +884,21 @@
     renderItinerary();
   }
 
-  function addItineraryActivity(period) {
+  function addItineraryActivity(period, text) {
     if (!itineraryEdit) return;
     itineraryActivitySequence += 1;
     const id = window.crypto?.randomUUID ? window.crypto.randomUUID() : `activity-${Date.now().toString(36)}-${itineraryActivitySequence}`;
     itineraryEdit.value = L.addItineraryActivity(itineraryEdit.value, period, id);
+    if (text) itineraryEdit.value = L.updateItineraryActivity(itineraryEdit.value, period, id, "text", text);
     renderItinerary();
     $(`[data-activity-id="${id}"][data-itinerary-field="text"]`)?.focus();
+  }
+
+  function applyActivityTemplate(name) {
+    const template = ITINERARY_ACTIVITY_TEMPLATES[name];
+    if (!template || !itineraryEdit) return;
+    addItineraryActivity(template.period, template.text);
+    showToast(`已添加${template.label}活动`);
   }
 
   function applyItineraryPreset(name) {
@@ -950,7 +971,7 @@
       if (minutes !== null) bufferText = `${Math.floor(minutes / 60)}小时${minutes % 60}分 · ${minutes < 360 ? "风险较高" : "仍需核对机场与航站楼"}`;
     }
     return `<article class="card booking-card">
-      <div class="booking-title"><div><p class="eyebrow">${esc(flight.airline)}</p><h3>${esc(flight.flightNumber)}</h3></div>${statusTag(status)}</div>
+      <div class="booking-title"><div><p class="eyebrow">${esc(flight.airline)}</p><h3>${esc(flight.flightNumber)}</h3></div><div class="status-row">${statusTag(status)}${flightActualTag(actual)}</div></div>
       <div class="flight-route"><div class="airport"><strong>${esc(flight.departureTime)}</strong><span>${esc(flight.departureAirport)}</span></div><div class="flight-line"></div><div class="airport"><strong>${esc(flight.arrivalTime)}</strong><span>${esc(flight.arrivalAirport)}</span></div></div>
       <div class="info-grid">
         <div class="info"><span>日期</span><strong>${esc(L.formatDate(flight.date, { year: "numeric", month: "numeric", day: "numeric" }))}</strong></div>
@@ -1393,6 +1414,8 @@
     if (editItinerary) return startItineraryEdit(editItinerary.dataset.itineraryEdit);
     const itineraryPreset = event.target.closest("[data-itinerary-preset]");
     if (itineraryPreset) return applyItineraryPreset(itineraryPreset.dataset.itineraryPreset);
+    const itineraryTemplate = event.target.closest("[data-itinerary-template]");
+    if (itineraryTemplate) return applyActivityTemplate(itineraryTemplate.dataset.itineraryTemplate);
     const addActivity = event.target.closest("[data-itinerary-add]");
     if (addActivity) return addItineraryActivity(addActivity.dataset.itineraryAdd);
     const moveActivity = event.target.closest("[data-itinerary-move]");
@@ -1724,6 +1747,7 @@
     document.addEventListener("submit", handleSubmit);
     $("#import-file").addEventListener("change", handleImport);
     setupNetwork();
+    window.setInterval(updateTravelCountdown, 30000);
     switchView("home", false);
     if (documentService.hasSession) verifyPrivateSession();
   }

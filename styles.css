@@ -146,6 +146,8 @@ main {
 .command-next-time span { color: var(--muted); font-size: 10px; }
 .command-next-time strong { overflow-wrap: anywhere; color: var(--teal); font-family: Georgia, serif; font-size: 20px; }
 .command-location { margin: 0; color: var(--muted); font-size: 12px; }
+.command-countdown { margin: 9px 0 0; color: var(--muted); font-size: 11px; }
+.command-countdown strong { color: var(--teal); }
 .command-timeline { min-width: 0; padding-block: 8px; }
 .command-timeline-row { min-width: 0; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
 .command-timeline-row:last-child { border-bottom: 0; }

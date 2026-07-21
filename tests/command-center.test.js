@@ -27,6 +27,12 @@ assert.equal(L.nextActiveFlight(liveFlights, new Date(2026, 6, 21, 22, 0)).fligh
 assert.equal(L.nextTravelAction(data.itinerary[1], liveFlights, [], new Date(2026, 6, 21, 22, 0)).type, "航班", "Next Action 未优先展示临近航班");
 assert.equal(L.nextTravelAction(data.itinerary[1], [], [{ nameZh: "当前酒店", checkIn: "2026-07-21", checkOut: "2026-07-22", status: "confirmed" }], new Date(2026, 6, 21, 22, 0)).type, "酒店", "Next Action 未回退到当前酒店");
 assert.equal(L.nextTravelAction(data.itinerary[1], [], [], new Date(2026, 6, 21, 22, 0)).type, "交通", "Next Action 未回退到交通摘要");
+const flightAction = L.nextTravelAction(data.itinerary[1], liveFlights, [], new Date(2026, 6, 21, 22, 0));
+assert.equal(L.travelCountdown(flightAction.at, new Date(2026, 6, 21, 22, 0)), "11小时", "下一事件倒计时错误");
+assert.deepEqual(L.travelTimeline([
+  { id: "today", date: "2026-07-21", periods: { morning: ["23:00 当前事件"], noon: [], afternoon: [], evening: [] } },
+  { id: "tomorrow", date: "2026-07-22", periods: { morning: ["09:00 明日事件"], noon: [], afternoon: [], evening: [] } }
+], new Date(2026, 6, 21, 22, 0), 2).map((item) => item.text), ["当前事件", "明日事件"], "旅行时间轴未跨日排序");
 
 const override = {
   dayId: day.id,
@@ -70,15 +76,20 @@ const persisted = app.match(/function persistentState\(value\) \{([\s\S]*?)\n  \
 assert.match(app, /function commandCenterActive\(\) \{[\s\S]*documentService\.authenticated[\s\S]*Boolean\(sharedSnapshot\)/, "Private Command Center 登录边界缺失");
 assert.match(app, /function renderHome\(\) \{\s*if \(commandCenterActive\(\)\) return renderCommandCenter\(\);/, "首页未区分 Public 与 Private 模式");
 assert.match(app, /<article class="hero"/, "Public Mode 原首页被移除");
-assert.match(app, /const itinerary = itineraryDays\(\);[\s\S]*L\.itineraryTimeline\(focusDay\)/, "首页未读取合并行程");
+assert.match(app, /const itinerary = itineraryDays\(\);[\s\S]*L\.travelTimeline\(itinerary, new Date\(\), 8\)/, "首页未读取跨日合并行程");
 assert.match(app, /expense\.incurredOn === focusDay\.date/, "首页费用未限定当天");
 assert.match(app, /const documents = documentCounts\(\)/, "首页未读取 Document Center 状态");
 assert.match(app, /<h2>最近修改<\/h2>/, "Command Center 缺少最近修改");
 assert.match(app, /<strong>编辑今日行程<\/strong>/, "首页缺少编辑今日行程入口");
 assert.match(app, /Realtime Travel Status/, "Command Center 未升级为旅行实时状态中心");
 assert.match(app, /当前有效航班/, "Command Center 缺少当前有效航班状态");
+assert.match(app, /flightActualTag\(actual\)/, "航班卡片未突出显示实际状态");
 assert.match(app, /L\.nextTravelAction\(/, "Command Center 未使用优先行动逻辑");
 assert.doesNotMatch(app, /DATA\.alerts\[1\]/, "行程页仍被固定旧航班提醒覆盖");
+assert.match(app, /Travel Day Mode/, "首页缺少 Travel Day Mode");
+assert.match(app, /id="next-action-countdown"/, "首页缺少下一事件倒计时");
+assert.match(app, /<h2>旅行时间轴<\/h2>/, "首页缺少旅行时间轴视图");
+assert.match(app, /setInterval\(updateTravelCountdown, 30000\)/, "倒计时未定时刷新");
 for (const action of ["data-command-itinerary", "data-command-expense", "data-command-upload", 'data-go="documents"']) {
   assert.match(app, new RegExp(action), `Quick Action 缺失: ${action}`);
 }
