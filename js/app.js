@@ -604,6 +604,16 @@
     return ITINERARY_PERIODS.find(([name]) => name === period)?.[1] || period;
   }
 
+  function liveTravelState(day) {
+    const flights = DATA.flights.map((flight) => ({ ...flight, ...state.flights[flight.id] }));
+    const hotels = DATA.hotels.map((hotel) => ({ ...hotel, ...state.hotels[hotel.id] }));
+    return {
+      flight: L.nextActiveFlight(flights),
+      hotel: hotels.filter((hotel) => hotel.status !== "cancelled" && hotel.checkIn <= day.date && hotel.checkOut >= day.date).sort((a, b) => b.checkIn.localeCompare(a.checkIn))[0] || null,
+      nextAction: L.nextTravelAction(day, flights, hotels)
+    };
+  }
+
   function renderCommandCenter() {
     const itinerary = itineraryDays();
     const trip = L.tripMoment(DATA.meta);
@@ -611,36 +621,36 @@
     const focusDay = current || (trip.phase === "upcoming" ? itinerary[0] : itinerary.at(-1));
     const dayNumber = Math.max(1, itinerary.findIndex((day) => day.id === focusDay.id) + 1);
     const timeline = L.itineraryTimeline(focusDay);
-    const nextAction = L.nextItineraryEvent(focusDay);
+    const live = liveTravelState(focusDay);
+    const nextAction = live.nextAction;
     const todayExpenses = (sharedSnapshot.expenses || []).filter((expense) => expense.incurredOn === focusDay.date);
     const expenseTotals = L.expenseLedgerTotals(todayExpenses);
     const recentChanges = L.recentSharedChanges(sharedSnapshot.itineraryOverrides, sharedSnapshot.expenses);
     const documents = documentCounts();
     const sync = commandSyncState();
-    const connected = Math.min(2, sharedSnapshot.members.length);
     const writesDisabled = sync.key === "offline" || sync.key === "saving" || sharedDataLoading;
     const phaseLabel = trip.phase === "upcoming" ? "即将出发" : trip.phase === "traveling" ? "旅行进行中" : "旅行已结束";
 
     $("#view-home").innerHTML = `<div class="command-center">
       <header class="command-header">
-        <div class="command-header-top"><span class="command-private-label">Private Command Center</span><span class="command-sync-chip ${sync.key}" role="status" aria-live="polite">${esc(sync.label)}</span></div>
+        <div class="command-header-top"><span class="command-private-label">Realtime Travel Status</span><span class="command-sync-chip ${sync.key}" role="status" aria-live="polite">${esc(sync.label)}</span></div>
         <p class="eyebrow">Current trip · ${esc(phaseLabel)}</p>
         <h1>${esc(DATA.meta.title)}</h1>
         <div class="command-travel-meta">
-          <div><span>当前 Day</span><strong>Day ${esc(dayNumber)}</strong><small>${esc(L.formatDate(focusDay.date, { month: "long", day: "numeric", weekday: "short" }))}</small></div>
-          <div><span>城市</span><strong>${esc(focusDay.city)}</strong><small>${esc(focusDay.theme)}</small></div>
-          <div><span>双人同步</span><strong>${esc(connected)}/2 已连接</strong><small>${esc(sync.label)}</small></div>
+          <div><span>当前有效航班</span><strong>${esc(live.flight?.flightNumber || "暂无")}</strong><small>${live.flight ? `${esc(live.flight.date)} ${esc(live.flight.departureTime)} → ${esc(live.flight.arrivalTime)} · ${esc(live.flight.actualStatus)}` : "等待后续航段"}</small></div>
+          <div><span>当前住宿</span><strong>${esc(live.hotel?.nameZh || "待确认")}</strong><small>${live.hotel ? `${esc(live.hotel.checkIn)} → ${esc(live.hotel.checkOut)}` : esc(focusDay.theme)}</small></div>
+          <div><span>当前交通</span><strong>Day ${esc(dayNumber)} · ${esc(focusDay.city)}</strong><small>${esc(focusDay.transport)}</small></div>
         </div>
       </header>
 
       <div class="section-head"><div><p class="eyebrow">Next Action</p><h2>下一步</h2></div><p>${esc(focusDay.city)}</p></div>
       <article class="card command-next-action">
         <div class="command-next-time"><span>时间</span><strong>${esc(nextAction?.timeLabel || "待定")}</strong></div>
-        <div><p class="eyebrow">下一事件</p><h3>${esc(nextAction?.text || "今日已无后续安排")}</h3><p class="command-location">地点 · ${esc(focusDay.city)}</p></div>
+        <div><p class="eyebrow">${esc(nextAction?.type || "下一事件")}</p><h3>${esc(nextAction?.title || "今日已无后续安排")}</h3><p class="command-location">地点 · ${esc(nextAction?.location || focusDay.city)}</p></div>
       </article>
 
       <div class="section-head"><div><p class="eyebrow">Today Timeline</p><h2>今日行程</h2></div><p>${timeline.length}项</p></div>
-      <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${item.id === nextAction?.id ? "next" : ""}"><time>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(commandPeriodLabel(item.period))}</small></div></div>`).join("") : '<p class="empty">今天暂无活动</p>'}</div>
+      <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${nextAction?.type === "行程" && item.id === nextAction.id ? "next" : ""}"><time>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(commandPeriodLabel(item.period))}</small></div></div>`).join("") : '<p class="empty">今天暂无活动</p>'}</div>
 
       <div class="section-head"><div><p class="eyebrow">Expense Snapshot</p><h2>今日费用</h2></div><p>${todayExpenses.length}笔 · 不换汇</p></div>
       <div class="command-expense-snapshot">${EXPENSE_CURRENCIES.map((currency) => {
@@ -789,9 +799,10 @@
     const refreshButton = documentService.authenticated && sharedDataService.configured
       ? `<button class="button" type="button" id="refresh-itinerary" ${sharedDataLoading ? "disabled" : ""}>${sharedDataLoading ? "正在同步" : "刷新共享行程"}</button>`
       : "";
+    const activeFlight = liveTravelState(current || itinerary[0]).flight;
     $("#view-itinerary").innerHTML = `
       <header class="page-header"><p class="eyebrow">Daily story</p><h1>每日行程</h1><p>慢一点，把时间留给风景和彼此。所有待确认安排都会保留，不会因冲突被自动删除。</p><div class="header-actions"><button class="button" type="button" id="jump-today" ${current ? "" : "disabled"}>跳到今天</button>${editButton}${refreshButton}</div></header>
-      <article class="alert warning"><div><h3>${esc(DATA.alerts[1].title)}</h3><p>${esc(DATA.alerts[1].text)}</p></div></article>
+      ${activeFlight ? `<article class="alert warning"><div><h3>当前有效航班 · ${esc(activeFlight.flightNumber)}</h3><p>${esc(activeFlight.date)} ${esc(activeFlight.departureTime)} ${esc(activeFlight.departureAirport)} → ${esc(activeFlight.arrivalTime)} ${esc(activeFlight.arrivalAirport)} · 状态：${esc(activeFlight.actualStatus)}</p></div></article>` : ""}
       <div class="timeline">${itinerary.map((day, index) => dayCard(day, current?.id === day.id, index === 0 && !current, canEdit)).join("")}</div>
     `;
   }
@@ -1051,9 +1062,9 @@
 
   function renderBudget() {
     const grouped = budgetByCurrency();
+    const ledger = renderExpenseLedger();
     $("#view-budget").innerHTML = `
-      <header class="page-header"><p class="eyebrow">Shared spending</p><h1>Budget Center</h1><p>登录后直接记录双方共享费用；预算计划继续保存在本机。所有金额均不自动换汇。</p></header>
-      ${renderExpenseLedger()}
+      ${ledger || '<header class="page-header"><p class="eyebrow">Shared spending</p><h1>Budget Center</h1><p>登录后直接记录双方共享费用；预算计划继续保存在本机。所有金额均不自动换汇。</p></header>'}
       <div class="section-head"><div><p class="eyebrow">Plan</p><h2>预算计划</h2></div><p>本机保存</p></div>
       <article class="card"><p class="eyebrow">Overview</p><div class="budget-summary">${Object.entries(grouped).map(([currency, totals]) => `
         <div class="money-stat"><span>${esc(currency)} · 计划</span><strong>${money(totals.planned, currency)}</strong></div>
@@ -1078,8 +1089,8 @@
         <div class="expense-list">${expenses.length ? expenses.map(expenseCard).join("") : '<article class="card expense-ledger-state"><p>暂无共享费用，新增第一笔后双方即可读取。</p></article>'}</div>
       `;
     return `<section class="expense-ledger" aria-labelledby="expense-ledger-title">
-      <div class="section-head expense-ledger-head"><div><p class="eyebrow">Budget Center</p><h2 id="expense-ledger-title">共享费用账本</h2></div><div class="expense-ledger-actions"><button class="button small" type="button" data-expense-refresh ${sharedDataLoading || expenseEdit ? "disabled" : ""}>${sharedDataLoading ? "同步中" : "刷新"}</button><button class="button small primary" type="button" data-expense-create ${!sharedSnapshot || expenseEdit || sharedDataLoading ? "disabled" : ""}>新增费用</button></div></div>
-      <p class="expense-ledger-note">按 CNY、MYR、IDR、USD 分别汇总；不自动换汇。账本只保存在登录保护的共享数据库中。</p>
+      <header class="page-header"><p class="eyebrow">Expense Ledger</p><h1 id="expense-ledger-title">Budget Center</h1><p>共享费用优先展示；按 CNY、MYR、IDR、USD 分别汇总，不自动换汇。</p><div class="header-actions"><button class="button" type="button" data-expense-refresh ${sharedDataLoading || expenseEdit ? "disabled" : ""}>${sharedDataLoading ? "同步中" : "刷新"}</button><button class="button primary" type="button" data-expense-create ${!sharedSnapshot || expenseEdit || sharedDataLoading ? "disabled" : ""}>新增费用</button></div></header>
+      <p class="expense-ledger-note">账本只保存在登录保护的共享数据库中。</p>
       ${body}
     </section>`;
   }

@@ -221,6 +221,42 @@
     }) || null;
   }
 
+  function travelDateTime(date, time) {
+    const value = parseISODate(date);
+    if (!value || !/^\d{2}:\d{2}$/.test(time || "")) return null;
+    const [hour, minute] = time.split(":").map(Number);
+    value.setHours(hour, minute, 0, 0);
+    return value;
+  }
+
+  function nextActiveFlight(flights, now) {
+    const reference = now || new Date();
+    return (flights || [])
+      .filter((flight) => flight.status !== "cancelled" && !["取消", "已完成"].includes(flight.actualStatus))
+      .map((flight) => ({ flight, departure: travelDateTime(flight.date, flight.departureTime), arrival: travelDateTime(flight.date, flight.arrivalTime) }))
+      .filter((item) => item.departure && item.arrival && item.arrival >= reference)
+      .sort((a, b) => a.departure - b.departure)[0]?.flight || null;
+  }
+
+  function nextTravelAction(day, flights, hotels, now) {
+    const reference = now || new Date();
+    const flight = nextActiveFlight(flights, reference);
+    if (flight && daysBetween(dateKey(reference), flight.date) <= 1) return {
+      type: "航班",
+      id: flight.id,
+      timeLabel: `${formatDate(flight.date, { month: "numeric", day: "numeric" })} ${flight.departureTime}`,
+      title: `${flight.flightNumber} · ${flight.departureTime} → ${flight.arrivalTime}`,
+      location: `${flight.departureAirport} → ${flight.arrivalAirport}`
+    };
+    const hotel = (hotels || [])
+      .filter((item) => item.status !== "cancelled" && item.checkIn <= day?.date && item.checkOut >= day?.date)
+      .sort((a, b) => b.checkIn.localeCompare(a.checkIn))[0];
+    if (hotel) return { type: "酒店", id: hotel.id, timeLabel: hotel.checkOut === day.date ? "退房" : "住宿", title: hotel.nameZh || hotel.name, location: hotel.address || day.city };
+    if (String(day?.transport || "").trim()) return { type: "交通", id: "transport", timeLabel: "待定", title: day.transport, location: day.city };
+    const itinerary = nextItineraryEvent(day, reference);
+    return itinerary ? { ...itinerary, type: "行程", title: itinerary.text, location: day.city } : null;
+  }
+
   function recentSharedChanges(itineraryOverrides, expenses, limit) {
     const count = Number.isSafeInteger(limit) && limit >= 0 ? limit : 3;
     return [
@@ -265,5 +301,5 @@
     return Boolean(role && (expense?.createdBy === currentUserId || role === "owner"));
   }
 
-  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
+  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, nextActiveFlight, nextTravelAction, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
 })(typeof window !== "undefined" ? window : globalThis);

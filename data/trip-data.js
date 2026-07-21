@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.5.3",
-    versionName: "Experience Upgrade",
-    versionLabel: "体验升级版",
-    lastUpdated: "2026-07-21T22:31:43+08:00",
+    version: "1.5.4",
+    versionName: "Realtime Travel Status",
+    versionLabel: "旅行实时状态版",
+    lastUpdated: "2026-07-21T22:51:33+08:00",
     weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -66,7 +66,7 @@ window.TRIP_DATA = {
   route: [
     { id: "chengdu-out", city: "成都", date: "2026-07-20", status: "upcoming" },
     { id: "kuala-lumpur-out", city: "吉隆坡", date: "2026-07-20", status: "upcoming" },
-    { id: "bali", city: "巴厘岛", date: "2026-07-21", status: "pending" },
+    { id: "bali", city: "巴厘岛", date: "2026-07-22", status: "pending" },
     { id: "kuala-lumpur-return", city: "吉隆坡", date: "2026-07-25", status: "pending" },
     { id: "chengdu-return", city: "成都", date: "2026-07-26", status: "upcoming" }
   ],
@@ -80,12 +80,12 @@ window.TRIP_DATA = {
       notes: "航班与时间已确认；托运行李额等待确认。", status: "confirmed"
     },
     {
-      id: "flight-kl-bali", airline: "TBD", flightNumber: "OD157", date: "2026-07-21",
-      departureTime: "17:55", arrivalTime: "21:05", departureAirport: "吉隆坡国际机场",
+      id: "flight-kl-bali", airline: "TBD", flightNumber: "OD306", date: "2026-07-22",
+      departureTime: "09:00", arrivalTime: "12:00", departureAirport: "吉隆坡国际机场",
       arrivalAirport: "巴厘岛伍拉·赖国际机场（DPS）", departureTerminal: "TBD", arrivalTerminal: "TBD",
       checkedBaggage: "TBD", connectionGroup: "separate", isThroughTicket: false,
-      bookingStatus: "pending", checkInStatus: "pending", actualStatus: "等待确认",
-      notes: "航班号与时间已录入；航空公司、航站楼、行李额和最终订单状态等待确认。", status: "pending"
+      bookingStatus: "confirmed", checkInStatus: "pending", actualStatus: "等待确认",
+      notes: "因错过原航班，已改乘OD306；航站楼、行李额和实时状态等待确认。", status: "confirmed"
     },
     {
       id: "flight-bali-kl", airline: "TBD", flightNumber: "OD307", date: "2026-07-25",
@@ -114,12 +114,12 @@ window.TRIP_DATA = {
       phone: "TBD", orderAlias: "等待确认", notes: "尚未确认预订与押金方式。", status: "pending"
     },
     {
-      id: "hotel-denpasar-airbnb", name: "Denpasar Selatan Airbnb Apartment", nameZh: "登巴萨南区 Airbnb 公寓",
-      image: "assets/images/bali-beach.webp", imageAlt: "巴厘岛海滩与酒店氛围占位图",
-      address: "Kecamatan Denpasar Selatan, Bali（准确地址等待确认）", checkIn: "2026-07-21", checkOut: "2026-07-22",
+      id: "hotel-denpasar-airbnb", name: "Kuala Lumpur Airbnb", nameZh: "吉隆坡 Airbnb 民宿",
+      image: "assets/images/kuala-lumpur-cover.webp", imageAlt: "吉隆坡城市与民宿氛围占位图",
+      address: "Kuala Lumpur（准确地址等待确认）", checkIn: "2026-07-21", checkOut: "2026-07-22",
       roomType: "Airbnb 公寓（具体房型TBD）", breakfast: "等待确认", paid: false, bookingPlatform: "Airbnb",
       bookingStatus: "confirmed", depositAmount: "TBD", depositMethod: "等待确认",
-      phone: "TBD", orderAlias: "已确认住宿（不保存订单号）", notes: "7月21日晚抵达；7月22日努沙佩尼达出海；需要确认退房后行李寄存。", status: "confirmed"
+      phone: "TBD", orderAlias: "已确认住宿（不保存订单号）", notes: "7月21日入住；7月22日07:00退房前往机场。", status: "confirmed"
     },
     {
       id: "hotel-kerobokan-airbnb", name: "Kerobokan Airbnb Villa", nameZh: "北库塔水明漾周边 Airbnb 别墅",
@@ -162,32 +162,32 @@ window.TRIP_DATA = {
       maps: [{ label: "如玛酒店", query: "The RuMa Hotel and Residences" }, { label: "双子塔", query: "Petronas Twin Towers Kuala Lumpur" }, { label: "阿罗街", query: "Jalan Alor Kuala Lumpur" }, { label: "Pavilion", query: "Pavilion Kuala Lumpur" }]
     },
     {
-      id: "day-2", date: "2026-07-21", city: "吉隆坡 → 巴厘岛 · 南登巴萨", theme: "吉隆坡轻松游 → 巴厘岛",
-      keywords: ["布城", "粉红清真寺", "晚间抵达"],
+      id: "day-2", date: "2026-07-21", city: "吉隆坡", theme: "吉隆坡 Airbnb 民宿",
+      keywords: ["布城", "粉红清真寺", "Airbnb"],
       image: "assets/images/putrajaya-mosque.webp", imageAlt: "布城粉红清真寺占位图",
-      transport: "酒店 → 布城粉红清真寺 → 酒店取行李 → 吉隆坡机场；OD157 17:55 KUL → 21:05 DPS", status: "pending", confirmed: false, weather: "等待人工录入",
+      transport: "吉隆坡市内交通；2026-07-22 07:00 从吉隆坡 Airbnb 民宿退房后前往机场", status: "changed", confirmed: true, weather: "等待人工录入",
       periods: {
         morning: ["睡醒后早餐", "10:30 办理退房并寄存行李", "前往Putrajaya Pink Mosque"],
         noon: ["参观粉红清真寺", "湖边拍照"],
-        afternoon: ["14:30 返回酒店取行李", "15:00 前往吉隆坡机场", "17:55 搭乘OD157飞往巴厘岛"],
-        evening: ["21:05 抵达DPS", "前往南登巴萨Airbnb公寓", "办理深夜入住", "准备第二天出海用品"]
+        afternoon: ["14:30 返回酒店取行李"],
+        evening: ["入住吉隆坡 Airbnb 民宿"]
       },
-      notes: ["提前确认南登巴萨Airbnb深夜入住方式。", "确认7月22日退房后的行李寄存安排。", "OD157航空公司、航站楼、行李额和订单状态等待确认。"],
-      maps: [{ label: "粉红清真寺", query: "Putra Mosque Putrajaya" }, { label: "吉隆坡机场", query: "Kuala Lumpur International Airport" }, { label: "南登巴萨", query: "Kecamatan Denpasar Selatan Bali" }]
+      notes: ["住宿：吉隆坡 Airbnb 民宿", "入住：2026-07-21", "退房：2026-07-22 07:00"],
+      maps: [{ label: "粉红清真寺", query: "Putra Mosque Putrajaya" }, { label: "吉隆坡机场", query: "Kuala Lumpur International Airport" }]
     },
     {
-      id: "day-3", date: "2026-07-22", city: "南登巴萨 → 努沙佩尼达 → 水明漾/北库塔", theme: "努沙佩尼达出海 + 水明漾夜生活",
-      keywords: ["努沙佩尼达", "浮潜", "水明漾日落"],
+      id: "day-3", date: "2026-07-22", city: "Kuala Lumpur → Bali", theme: "航班变更 · OD306",
+      keywords: ["OD306", "航班变更", "抵达巴厘岛"],
       image: "assets/images/nusa-penida.webp", imageAlt: "努沙佩尼达海景占位图",
-      transport: "南登巴萨 → 萨努尔码头 → 努沙佩尼达 → 萨努尔 → 取行李 → 北库塔Airbnb", status: "pending", confirmed: false, weather: "等待人工录入",
+      transport: "OD306 · 2026-07-22 09:00 Kuala Lumpur → Bali · 12:00 arrival", status: "confirmed", confirmed: true, weather: "等待人工录入",
       periods: {
-        morning: ["办理南登巴萨Airbnb退房并寄存行李", "前往萨努尔码头", "乘船前往努沙佩尼达", "西线游览Kelingking Beach恐龙湾、Broken Beach、Angel's Billabong和Crystal Bay"],
-        noon: ["根据海况在Crystal Bay或Manta Point浮潜", "海景拍照"],
-        afternoon: ["返回萨努尔", "取行李", "前往北库塔Airbnb办理入住"],
-        evening: ["前往Seminyak Beach看日落", "根据体力选择Potato Head Beach Club和La Favela", "控制饮酒，为第二天乌布行程留体力"]
+        morning: ["09:00 OD306 Kuala Lumpur → Bali"],
+        noon: ["12:00 arrival"],
+        afternoon: ["酒店入住"],
+        evening: ["晚餐休息"]
       },
-      notes: ["必须携带晕船药、防晒、防水手机袋、墨镜和泳衣。", "不要为拍照脱离安全区域，不要强行参加恶劣海况项目。", "北库塔别墅不在水明漾海滩步行核心区，外出优先使用Grab。", "不要饮酒过量。"],
-      maps: [{ label: "萨努尔码头", query: "Sanur Harbour Bali" }, { label: "努沙佩尼达", query: "Nusa Penida Bali" }, { label: "北库塔别墅", query: "Jalan Taman Sari PCP 7, Kecamatan Kuta Utara, Bali" }, { label: "水明漾海滩", query: "Seminyak Beach Bali" }]
+      notes: ["因错过原航班，改乘 OD306 前往巴厘岛。"],
+      maps: [{ label: "吉隆坡机场", query: "Kuala Lumpur International Airport" }, { label: "巴厘岛机场", query: "I Gusti Ngurah Rai International Airport" }]
     },
     {
       id: "day-4", date: "2026-07-23", city: "水明漾/北库塔 → 乌布 → Hilton Bali Resort", theme: "水明漾 → 乌布 → Hilton Bali Resort",
@@ -344,13 +344,13 @@ window.TRIP_DATA = {
     { phase: "Phase 4 吉隆坡入住", time: "2026-07-20 入境后", task: "Grab前往The RuMa Hotel", description: "从机场乘Grab前往The RuMa Hotel，预计45-60分钟，实际以路况为准。", priority: "HIGH", completed: false },
     { phase: "Phase 4 吉隆坡入住", time: "2026-07-20 到店后", task: "完成The RuMa入住", description: "办理入住时确认护照、押金和WiFi。", priority: "HIGH", completed: false },
     { phase: "Phase 4 吉隆坡入住", time: "2026-07-20 晚", task: "前往KLCC双子塔", description: "根据抵达体力执行首晚KLCC双子塔安排，不增加长距离移动。", priority: "MEDIUM", completed: false },
-    { phase: "Phase 5 7月21飞巴厘岛", time: "2026-07-21 15:00左右", task: "到达KUL机场", description: "OD157于17:55起飞，计划15:00左右抵达KUL机场。", priority: "HIGH", completed: false },
-    { phase: "Phase 5 7月21飞巴厘岛", time: "2026-07-21 值机前", task: "检查OD157登机资料", description: "确认护照、登机牌和行李额度。", priority: "HIGH", completed: false },
-    { phase: "Phase 6 巴厘岛落地", time: "2026-07-21 21:05后", task: "完成DPS入境和取行李", description: "抵达DPS后完成入境并取行李。", priority: "HIGH", completed: false },
-    { phase: "Phase 6 巴厘岛落地", time: "2026-07-21 取行李后", task: "开启网络并联系住宿", description: "开启手机网络，联系住宿并确认晚间入住方式；不在项目中保存私人联系方式。", priority: "HIGH", completed: false },
-    { phase: "Phase 6 巴厘岛落地", time: "2026-07-21 预计23:00", task: "Grab前往南登巴萨Airbnb", description: "乘Grab前往Airbnb，预计23:00左右入住，实际以入境和路况为准。", priority: "HIGH", completed: false },
-    { phase: "Phase 7 7月22出海前", time: "2026-07-21 晚", task: "准备出海随身包", description: "装好泳衣、防晒、墨镜、帽子、防水袋、晕船药和手机。", priority: "HIGH", completed: false },
-    { phase: "Phase 7 7月22出海前", time: "2026-07-21 晚", task: "确认出海执行信息", description: "确认船班时间、集合地点和接送司机。", priority: "HIGH", completed: false }
+    { phase: "Phase 5 7月22飞巴厘岛", time: "2026-07-22 07:00", task: "退房并前往KUL机场", description: "OD306于09:00起飞，07:00从吉隆坡Airbnb退房前往机场。", priority: "HIGH", completed: false },
+    { phase: "Phase 5 7月22飞巴厘岛", time: "2026-07-22 值机前", task: "检查OD306登机资料", description: "确认护照、登机牌和行李额度。", priority: "HIGH", completed: false },
+    { phase: "Phase 6 巴厘岛落地", time: "2026-07-22 12:00后", task: "完成DPS入境和取行李", description: "抵达DPS后完成入境并取行李。", priority: "HIGH", completed: false },
+    { phase: "Phase 6 巴厘岛落地", time: "2026-07-22 取行李后", task: "开启网络并联系住宿", description: "开启手机网络，联系住宿并确认入住方式；不在项目中保存私人联系方式。", priority: "HIGH", completed: false },
+    { phase: "Phase 6 巴厘岛落地", time: "2026-07-22 入境后", task: "前往巴厘岛住宿", description: "完成入境和取行李后前往住宿，实际以交通和入住安排为准。", priority: "HIGH", completed: false },
+    { phase: "Phase 7 7月23出海前", time: "2026-07-22 晚", task: "准备出海随身包", description: "装好泳衣、防晒、墨镜、帽子、防水袋、晕船药和手机。", priority: "HIGH", completed: false },
+    { phase: "Phase 7 7月23出海前", time: "2026-07-22 晚", task: "确认出海执行信息", description: "确认船班时间、集合地点和接送司机。", priority: "HIGH", completed: false }
   ],
   departureCountdown: {
     title: "出发倒计时",
@@ -457,10 +457,11 @@ window.TRIP_DATA = {
   ],
   alerts: [
     { id: "separate-ticket", severity: "critical", title: "非联程票风险", text: "巴厘岛飞吉隆坡与吉隆坡飞成都不是联程票时，前一段延误不会受到后一段航班保护。必须预留充足的入境、取行李、换航站楼和重新值机时间。", active: true },
-    { id: "day2-airport-timing", severity: "warning", title: "7月21日机场时间提醒", text: "OD157于17:55起飞，计划14:30返回酒店取行李、15:00前往机场；需提前确认布城往返交通和航站楼。", active: true },
+    { id: "day2-airport-timing", severity: "warning", title: "7月22日机场时间提醒", text: "OD306于09:00从吉隆坡飞往巴厘岛，计划07:00从Airbnb退房前往机场；航站楼、行李额和实时状态仍需确认。", active: true },
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-21T22:51:33+08:00", version: "1.5.4", change: "Added realtime travel status, priority actions and Budget Center first-screen ledger" },
     { at: "2026-07-21T22:31:43+08:00", version: "1.5.3", change: "Completed Command Center itinerary, expense and recent-change actions" },
     { at: "2026-07-21T10:50:05+08:00", version: "1.5.1", change: "Aligned trip data version with v1.5.1 production database release" },
     { at: "2026-07-20T01:45:45+08:00", version: "1.5.0", change: "Added authenticated Private Document Center" },
@@ -534,9 +535,9 @@ window.TRIP_DATA = {
     "Phase 2 成都机场出发当天": "2026-07-20",
     "Phase 3 吉隆坡入境": "2026-07-20",
     "Phase 4 吉隆坡入住": "2026-07-20",
-    "Phase 5 7月21飞巴厘岛": "2026-07-21",
-    "Phase 6 巴厘岛落地": "2026-07-21",
-    "Phase 7 7月22出海前": "2026-07-21"
+    "Phase 5 7月22飞巴厘岛": "2026-07-22",
+    "Phase 6 巴厘岛落地": "2026-07-22",
+    "Phase 7 7月23出海前": "2026-07-22"
   };
   const finalDepartureItems = data.finalDepartureChecklist.map((item, index) => ({
     id: `final-departure-${index + 1}`,
