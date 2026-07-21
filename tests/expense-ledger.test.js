@@ -51,6 +51,7 @@ const app = fs.readFileSync("js/app.js", "utf8");
 const css = fs.readFileSync("styles.css", "utf8");
 const worker = fs.readFileSync("service-worker.js", "utf8");
 const persisted = app.match(/function persistentState\(value\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+const budgetView = app.match(/function renderBudget\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 
 assert.match(app, /function renderExpenseLedger\(\) \{[\s\S]*if \(!documentService\.authenticated \|\| !sharedDataService\.configured\) return "";/, "未登录时未保持公共预算模式");
 assert.match(app, /createExpense\(\{ clientRef: expenseEdit\.clientRef, \.\.\.payload \}\)/, "新增未复用稳定 client_ref");
@@ -64,6 +65,8 @@ for (const name of ["title", "category", "amount", "currency", "incurredOn", "pa
 assert.doesNotMatch(persisted, /expense|ledger|snapshot|member/i, "共享费用进入 localStorage 白名单");
 assert.doesNotMatch(app, /supabase_realtime|\.channel\(/i, "Expense Ledger 提前启用了 Realtime");
 assert.match(app, /不自动换汇/, "费用账本未声明禁止自动换汇");
+assert.match(budgetView, /<h1>Budget Center<\/h1>/, "预算页未提供清晰的 Budget Center 入口");
+assert.ok(budgetView.indexOf("renderExpenseLedger()") < budgetView.indexOf("<h2>预算计划</h2>"), "共享费用账本未置于预算计划之前");
 assert.match(worker, /\.\/js\/shared-data\.js/, "共享数据客户端未加入应用壳缓存");
 assert.match(worker, /privateRequest[\s\S]*\/rest\/v1\//, "Service Worker 未排除共享费用 API");
 assert.match(css, /\.expense-ledger \{[^}]*min-width: 0;/, "费用账本缺少窄屏收缩边界");

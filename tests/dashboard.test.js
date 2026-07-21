@@ -64,7 +64,7 @@ assert.ok(index.indexOf("config/sync-config.js") < index.indexOf("js/sync.js") &
 assert.ok(index.indexOf("data/trip-data.js") < index.indexOf("data/offline-pack.js") && index.indexOf("data/offline-pack.js") < index.indexOf("js/app.js"), "Offline Pack脚本加载顺序错误");
 assert.ok(index.indexOf("js/weather.js") < index.indexOf("js/app.js"), "天气脚本加载顺序错误");
 assert.ok(index.indexOf("js/documents.js") < index.indexOf("js/app.js"), "私人资料脚本加载顺序错误");
-assert.match(serviceWorker, /CACHE_VERSION = "v1\.5\.1"/, "Service Worker缓存版本未更新");
+assert.match(serviceWorker, /CACHE_VERSION = "v1\.5\.2\.1"/, "Service Worker缓存版本未更新");
 assert.match(serviceWorker, /config\/sync-config\.js/, "同步配置未加入离线缓存");
 assert.match(serviceWorker, /js\/sync\.js/, "同步逻辑未加入离线缓存");
 assert.match(serviceWorker, /js\/weather\.js/, "天气逻辑未加入离线缓存");

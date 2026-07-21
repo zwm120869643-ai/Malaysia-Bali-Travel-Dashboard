@@ -777,11 +777,15 @@
     const itinerary = itineraryDays();
     const current = L.currentItinerary(itinerary);
     const canEdit = documentService.authenticated && sharedDataService.configured && Boolean(sharedSnapshot);
+    const editDay = itinerary.find((day) => day.id === itineraryEdit?.value.dayId) || current || itinerary[0];
+    const editButton = canEdit && editDay
+      ? `<button class="button primary" type="button" data-command-itinerary="${esc(editDay.id)}">${itineraryEdit ? "继续编辑" : current ? "编辑今天" : "编辑首日"}</button>`
+      : "";
     const refreshButton = documentService.authenticated && sharedDataService.configured
       ? `<button class="button" type="button" id="refresh-itinerary" ${sharedDataLoading ? "disabled" : ""}>${sharedDataLoading ? "正在同步" : "刷新共享行程"}</button>`
       : "";
     $("#view-itinerary").innerHTML = `
-      <header class="page-header"><p class="eyebrow">Daily story</p><h1>每日行程</h1><p>慢一点，把时间留给风景和彼此。所有待确认安排都会保留，不会因冲突被自动删除。</p><div class="header-actions"><button class="button primary" type="button" id="jump-today" ${current ? "" : "disabled"}>跳到今天</button>${refreshButton}</div></header>
+      <header class="page-header"><p class="eyebrow">Daily story</p><h1>每日行程</h1><p>慢一点，把时间留给风景和彼此。所有待确认安排都会保留，不会因冲突被自动删除。</p><div class="header-actions"><button class="button" type="button" id="jump-today" ${current ? "" : "disabled"}>跳到今天</button>${editButton}${refreshButton}</div></header>
       <article class="alert warning"><div><h3>${esc(DATA.alerts[1].title)}</h3><p>${esc(DATA.alerts[1].text)}</p></div></article>
       <div class="timeline">${itinerary.map((day, index) => dayCard(day, current?.id === day.id, index === 0 && !current, canEdit)).join("")}</div>
     `;
@@ -823,6 +827,8 @@
       <div class="itinerary-editor-title"><div><strong>编辑当天行程</strong><span>${itineraryEdit.revision ? `共享版本 r${esc(itineraryEdit.revision)}` : "首次创建共享版本"}</span></div></div>
       ${itineraryConflict ? '<article class="alert critical"><div><h3>发现版本冲突</h3><p>对方已更新当天行程。当前草稿仍保留，请取消后重新编辑最新版本。</p></div></article>' : ""}
       <fieldset class="itinerary-editor-fields" ${itinerarySaving ? "disabled" : ""}>
+        <div class="field-grid"><label class="field">主题<input maxlength="160" value="${esc(value.theme)}" data-itinerary-root-field="theme" required></label><label class="field">状态<select data-itinerary-root-field="status">${STATUSES.map((status) => `<option value="${status}" ${status === value.status ? "selected" : ""}>${status === "pending" ? "planned" : status}</option>`).join("")}</select></label></div>
+        ${value.travelDate === "2026-07-22" ? '<div class="card-actions"><button class="button small" type="button" data-itinerary-preset="od306">填入 OD306 航班变更</button></div>' : ""}
         <label class="field">交通摘要<textarea maxlength="1000" data-itinerary-root-field="transport">${esc(value.transport)}</textarea></label>
         ${periods}
         <label class="field">注意事项（每行一项）<textarea maxlength="10019" data-itinerary-notes>${esc(value.notes.join("\n"))}</textarea></label>
@@ -856,6 +862,27 @@
     itineraryEdit.value = L.addItineraryActivity(itineraryEdit.value, period, id);
     renderItinerary();
     $(`[data-activity-id="${id}"][data-itinerary-field="text"]`)?.focus();
+  }
+
+  function applyItineraryPreset(name) {
+    if (name !== "od306" || !itineraryEdit || itineraryEdit.value.travelDate !== "2026-07-22") return;
+    itineraryEdit.value = {
+      ...itineraryEdit.value,
+      city: "Kuala Lumpur → Bali",
+      theme: "航班变更 · OD306",
+      transport: "OD306 · 2026-07-22 09:00 Kuala Lumpur → Bali · 12:00 arrival",
+      periods: {
+        morning: [{ id: "od306-departure", time: "09:00", text: "OD306 Kuala Lumpur → Bali", order: 10, status: "planned" }],
+        noon: [{ id: "od306-arrival", time: "12:00", text: "arrival", order: 10, status: "planned" }],
+        afternoon: [{ id: "od306-check-in", time: null, text: "酒店入住", order: 10, status: "planned" }],
+        evening: [{ id: "od306-dinner", time: null, text: "晚餐休息", order: 10, status: "planned" }]
+      },
+      notes: ["因错过原航班，改乘 OD306 前往巴厘岛。"],
+      maps: [],
+      status: "confirmed"
+    };
+    renderItinerary();
+    showToast("已填入 OD306 航班变更，请确认后保存");
   }
 
   async function saveItineraryEdit() {
@@ -1020,7 +1047,9 @@
   function renderBudget() {
     const grouped = budgetByCurrency();
     $("#view-budget").innerHTML = `
-      <header class="page-header"><p class="eyebrow">Shared spending</p><h1>旅行预算</h1><p>不自动获取汇率。金额在本机保存，不记录银行卡或支付密码。</p></header>
+      <header class="page-header"><p class="eyebrow">Shared spending</p><h1>Budget Center</h1><p>登录后直接记录双方共享费用；预算计划继续保存在本机。所有金额均不自动换汇。</p></header>
+      ${renderExpenseLedger()}
+      <div class="section-head"><div><p class="eyebrow">Plan</p><h2>预算计划</h2></div><p>本机保存</p></div>
       <article class="card"><p class="eyebrow">Overview</p><div class="budget-summary">${Object.entries(grouped).map(([currency, totals]) => `
         <div class="money-stat"><span>${esc(currency)} · 计划</span><strong>${money(totals.planned, currency)}</strong></div>
         <div class="money-stat"><span>${esc(currency)} · 实际</span><strong>${money(totals.actual, currency)}</strong></div>
@@ -1029,7 +1058,6 @@
       `).join("")}</div><p class="card-subtitle" style="margin-top:12px">${esc(DATA.exchangeRates.note)}</p></article>
       <div class="section-head"><div><p class="eyebrow">Items</p><h2>预算项目</h2></div><p>实际花费可直接修改</p></div>
       <div class="grid budget-list">${DATA.budget.map(budgetCard).join("")}</div>
-      ${renderExpenseLedger()}
     `;
   }
 
@@ -1045,7 +1073,7 @@
         <div class="expense-list">${expenses.length ? expenses.map(expenseCard).join("") : '<article class="card expense-ledger-state"><p>暂无共享费用，新增第一笔后双方即可读取。</p></article>'}</div>
       `;
     return `<section class="expense-ledger" aria-labelledby="expense-ledger-title">
-      <div class="section-head expense-ledger-head"><div><p class="eyebrow">Expense Ledger</p><h2 id="expense-ledger-title">共享费用账本</h2></div><div class="expense-ledger-actions"><button class="button small" type="button" data-expense-refresh ${sharedDataLoading || expenseEdit ? "disabled" : ""}>${sharedDataLoading ? "同步中" : "刷新"}</button><button class="button small primary" type="button" data-expense-create ${!sharedSnapshot || expenseEdit || sharedDataLoading ? "disabled" : ""}>新增费用</button></div></div>
+      <div class="section-head expense-ledger-head"><div><p class="eyebrow">Budget Center</p><h2 id="expense-ledger-title">共享费用账本</h2></div><div class="expense-ledger-actions"><button class="button small" type="button" data-expense-refresh ${sharedDataLoading || expenseEdit ? "disabled" : ""}>${sharedDataLoading ? "同步中" : "刷新"}</button><button class="button small primary" type="button" data-expense-create ${!sharedSnapshot || expenseEdit || sharedDataLoading ? "disabled" : ""}>新增费用</button></div></div>
       <p class="expense-ledger-note">按 CNY、MYR、IDR、USD 分别汇总；不自动换汇。账本只保存在登录保护的共享数据库中。</p>
       ${body}
     </section>`;
@@ -1339,6 +1367,8 @@
     if (event.target.closest("[data-expense-refresh]")) return loadSharedSnapshot(true);
     const editItinerary = event.target.closest("[data-itinerary-edit]");
     if (editItinerary) return startItineraryEdit(editItinerary.dataset.itineraryEdit);
+    const itineraryPreset = event.target.closest("[data-itinerary-preset]");
+    if (itineraryPreset) return applyItineraryPreset(itineraryPreset.dataset.itineraryPreset);
     const addActivity = event.target.closest("[data-itinerary-add]");
     if (addActivity) return addItineraryActivity(addActivity.dataset.itineraryAdd);
     const moveActivity = event.target.closest("[data-itinerary-move]");
@@ -1399,8 +1429,9 @@
       return;
     }
     if (!itineraryEdit) return;
-    if (event.target.dataset.itineraryRootField === "transport") {
-      itineraryEdit.value = { ...itineraryEdit.value, transport: event.target.value };
+    const rootField = event.target.dataset.itineraryRootField;
+    if (["theme", "status", "transport"].includes(rootField)) {
+      itineraryEdit.value = { ...itineraryEdit.value, [rootField]: event.target.value };
       return;
     }
     if (Object.prototype.hasOwnProperty.call(event.target.dataset, "itineraryNotes")) {

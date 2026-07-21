@@ -64,6 +64,8 @@ const css = fs.readFileSync("styles.css", "utf8");
 const worker = fs.readFileSync("service-worker.js", "utf8");
 const persisted = app.match(/function persistentState\(value\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 const cancelEdit = app.match(/function cancelItineraryEdit\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+const itineraryView = app.match(/function renderItinerary\(\) \{([\s\S]*?)\n  \}/)?.[1] || "";
+const flightPreset = app.match(/function applyItineraryPreset\(name\) \{([\s\S]*?)\n  \}/)?.[1] || "";
 
 assert.ok(index.indexOf("js/shared-data.js") < index.indexOf("js/app.js"), "shared-data 必须先于 app 加载");
 assert.match(app, /TravelSharedData\.create\(window\.TRAVEL_SYNC_CONFIG, documentService\)/, "未复用现有 Auth session provider");
@@ -71,9 +73,20 @@ assert.match(app, /saveItineraryOverride\(itineraryEdit\.value, itineraryEdit\.r
 assert.match(app, /await sharedDataService\.saveItineraryOverride[\s\S]*itineraryEdit = null;[\s\S]*loadSharedSnapshot\(true\)/, "保存成功后未刷新 snapshot");
 assert.match(app, /error\?\.code === "CONFLICT"[\s\S]*loadSharedSnapshot\(true\)/, "revision 冲突未提示并刷新 snapshot");
 assert.match(app, /if \(!documentService\.authenticated\) return showToast\("登录后才能编辑共享行程"\)/, "未登录写入缺少 UI guard");
+assert.match(itineraryView, /data-command-itinerary=/, "行程页头缺少直接编辑入口");
+assert.match(itineraryView, /继续编辑[\s\S]*编辑今天[\s\S]*编辑首日/, "行程编辑入口未反映当前编辑或旅行日期状态");
+assert.match(app, /data-itinerary-root-field="theme"/, "行程编辑器缺少 theme 字段");
+assert.match(app, /data-itinerary-root-field="status"/, "行程编辑器缺少 status 字段");
+assert.match(app, /status === "pending" \? "planned" : status/, "planned 未兼容数据库既有 pending 状态");
+assert.match(app, /data-itinerary-preset="od306"/, "缺少 OD306 航班变更快捷输入");
+for (const value of ["OD306", "2026-07-22", "09:00", "Kuala Lumpur → Bali", "12:00", "arrival", "酒店入住", "晚餐休息"]) {
+  assert.match(flightPreset, new RegExp(value), `OD306 快捷输入缺少 ${value}`);
+}
+assert.match(flightPreset, /status: "confirmed"/, "OD306 快捷输入未设为 confirmed");
 assert.ok(cancelEdit, "缺少取消编辑流程");
 assert.doesNotMatch(cancelEdit, /sharedDataService|saveItineraryOverride/, "取消编辑触发了云端写入");
 assert.doesNotMatch(persisted, /itinerary|override|snapshot/i, "共享行程进入 localStorage 白名单");
+assert.doesNotMatch(persisted, /OD306|theme/i, "行程快捷输入进入 localStorage 白名单");
 assert.doesNotMatch(app, /supabase_realtime|\.channel\(/i, "Commit 3 不得开启 Realtime");
 assert.match(worker, /url\.origin !== location\.origin\) return;/, "Service Worker 未排除 Supabase 跨域响应");
 assert.doesNotMatch(worker, /travel_itinerary_overrides|travel_expenses/, "Service Worker 不得登记共享私有数据路径");
