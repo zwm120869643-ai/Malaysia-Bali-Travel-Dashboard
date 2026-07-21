@@ -275,6 +275,23 @@
     return `${remaining}分`;
   }
 
+  function flightWatchTarget(flight) {
+    if (!flight || ["arrived", "cancelled"].includes(flight.status)) return null;
+    return flight.status === "en_route" ? flight.arrival?.estimatedAt || null : flight.departure?.estimatedAt || null;
+  }
+
+  function flightDepartureAdvice(flight, now) {
+    if (!flight) return "实时查询不可用，请按手动状态和机场通知出发";
+    if (flight.status === "cancelled") return "航班已取消，请联系航空公司确认后续安排";
+    if (flight.status === "arrived") return "航班已抵达，无需出发提醒";
+    if (flight.status === "en_route") return "航班飞行中，请关注预计抵达时间";
+    if (flight.status === "delayed") return "航班延误，仍建议按原计划前往机场并关注柜台通知";
+    const target = flightWatchTarget(flight);
+    if (!target) return "预计时间待确认，建议按原计划前往机场";
+    const minutes = Math.ceil((Date.parse(target) - (now || new Date()).getTime()) / 60000);
+    return minutes <= 180 ? "距离起飞不足3小时，建议立即前往机场" : "建议预计起飞前3小时抵达机场";
+  }
+
   function travelTimeline(itinerary, now, limit) {
     const reference = now || new Date();
     const today = dateKey(reference);
@@ -337,5 +354,5 @@
     return Boolean(role && (expense?.createdBy === currentUserId || role === "owner"));
   }
 
-  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, nextActiveFlight, nextTravelAction, travelCountdown, travelTimeline, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
+  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, nextActiveFlight, nextTravelAction, travelCountdown, flightWatchTarget, flightDepartureAdvice, travelTimeline, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
 })(typeof window !== "undefined" ? window : globalThis);

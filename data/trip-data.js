@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.5.5",
-    versionName: "Travel Day Mode",
-    versionLabel: "旅行日模式版",
-    lastUpdated: "2026-07-21T23:04:38+08:00",
+    version: "1.5.6",
+    versionName: "Flight Watcher",
+    versionLabel: "航班监控版",
+    lastUpdated: "2026-07-21T23:18:15+08:00",
     weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -461,6 +461,7 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-21T23:18:15+08:00", version: "1.5.6", change: "Added cached Flight Watcher proxy, estimates, countdown and departure advice" },
     { at: "2026-07-21T23:04:38+08:00", version: "1.5.5", change: "Added Travel Day Mode countdown, trip timeline, quick expenses and activity templates" },
     { at: "2026-07-21T22:51:33+08:00", version: "1.5.4", change: "Added realtime travel status, priority actions and Budget Center first-screen ledger" },
     { at: "2026-07-21T22:31:43+08:00", version: "1.5.3", change: "Completed Command Center itinerary, expense and recent-change actions" },

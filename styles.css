@@ -148,6 +148,17 @@ main {
 .command-location { margin: 0; color: var(--muted); font-size: 12px; }
 .command-countdown { margin: 9px 0 0; color: var(--muted); font-size: 11px; }
 .command-countdown strong { color: var(--teal); }
+.flight-watcher-card { min-width: 0; display: grid; gap: 14px; }
+.flight-watcher-form { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; align-items: end; }
+.flight-watcher-form .button { grid-column: 1 / -1; }
+.flight-watch-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.flight-watch-grid > div { min-width: 0; padding: 11px; border-radius: 12px; background: var(--teal-soft); }
+.flight-watch-grid span, .flight-watch-grid strong, .flight-watch-grid small { display: block; overflow-wrap: anywhere; }
+.flight-watch-grid span, .flight-watch-grid small { color: var(--muted); font-size: 9px; }
+.flight-watch-grid strong { margin: 3px 0; color: var(--teal); font-size: 14px; }
+.flight-watch-advice, .flight-watch-error { margin: 0; font-size: 12px; }
+.flight-watch-advice strong { margin-right: 8px; color: var(--gold); }
+.flight-watch-error { color: var(--danger); }
 .command-timeline { min-width: 0; padding-block: 8px; }
 .command-timeline-row { min-width: 0; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
 .command-timeline-row:last-child { border-bottom: 0; }
@@ -455,6 +466,9 @@ main {
   .hero-content { padding: 42px; }
   .command-header { padding: 36px; }
   .command-travel-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .flight-watcher-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .flight-watcher-form .button { grid-column: auto; }
+  .flight-watch-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .command-expense-snapshot, .command-quick-actions, .command-sync-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .home-grid { grid-template-columns: 1.05fr .95fr; }
   .home-grid .route-card { grid-column: 1 / -1; }

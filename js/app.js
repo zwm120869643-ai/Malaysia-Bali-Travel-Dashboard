@@ -161,6 +161,9 @@
   const sharedDataService = window.TravelSharedData
     ? window.TravelSharedData.create(window.TRAVEL_SYNC_CONFIG, documentService)
     : { configured: false, async loadSnapshot() { return null; }, async refresh() { return null; }, async saveItineraryOverride() { const error = new Error("请先登录私人旅行数据"); error.code = "AUTH_REQUIRED"; throw error; } };
+  const flightWatcherService = window.TravelFlightWatcher
+    ? window.TravelFlightWatcher.create(window.TRAVEL_SYNC_CONFIG, documentService)
+    : { configured: false, clear() {}, async query() { throw new Error("航班查询服务未加载"); } };
   let state = storage.get();
   let weatherByLocation = {};
   let weatherLoading = true;
@@ -175,6 +178,12 @@
   let sharedDataRun;
   let sharedRequestVersion = 0;
   let sharedDataLoading = false;
+  let flightWatch = null;
+  let flightWatchRun;
+  let flightWatchInput = null;
+  let flightWatchRequestVersion = 0;
+  let flightWatchLoading = false;
+  let flightWatchError = "";
   let itineraryEdit = null;
   let itinerarySaving = false;
   let itineraryConflict = false;
@@ -471,6 +480,13 @@
     sharedSnapshot = null;
     sharedDataRun = null;
     sharedDataLoading = false;
+    flightWatch = null;
+    flightWatchRun = null;
+    flightWatchInput = null;
+    flightWatchRequestVersion += 1;
+    flightWatchLoading = false;
+    flightWatchError = "";
+    flightWatcherService.clear();
     itineraryEdit = null;
     itinerarySaving = false;
     itineraryConflict = false;
@@ -566,6 +582,7 @@
           expenses: snapshot.expenses || [],
           loadedAt: snapshot.loadedAt || null
         };
+        loadFlightWatch();
       }
       return snapshot;
     }).catch(async (error) => {
@@ -620,10 +637,44 @@
     };
   }
 
+  function loadFlightWatch(input) {
+    if (!documentService.authenticated || !flightWatcherService.configured || navigator.onLine === false) return Promise.resolve(null);
+    if (flightWatchRun) return flightWatchRun;
+    const itinerary = itineraryDays();
+    const current = L.currentItinerary(itinerary);
+    const focusDay = current || itinerary[0];
+    const active = liveTravelState(focusDay).flight;
+    const query = input || (active ? { flightNumber: active.flightNumber, date: active.date } : null);
+    if (!query) return Promise.resolve(null);
+    const runVersion = ++flightWatchRequestVersion;
+    flightWatchInput = { flightNumber: String(query.flightNumber || "").toUpperCase().replace(/[\s-]+/g, ""), date: String(query.date || "") };
+    flightWatchLoading = true;
+    flightWatchError = "";
+    renderHome();
+    const run = flightWatcherService.query(query).then((value) => {
+      if (runVersion === flightWatchRequestVersion && documentService.authenticated) flightWatch = value;
+      return value;
+    }).catch(async (error) => {
+      if (runVersion !== flightWatchRequestVersion) return null;
+      flightWatch = null;
+      flightWatchError = error?.message || "航班网络查询失败，已保留手动状态";
+      if (error?.status === 401) await resetPrivateSession("登录已失效，请重新登录");
+      return null;
+    }).finally(() => {
+      if (runVersion !== flightWatchRequestVersion) return;
+      flightWatchLoading = false;
+      flightWatchRun = null;
+      renderHome();
+    });
+    flightWatchRun = run;
+    return run;
+  }
+
   function updateTravelCountdown() {
     const countdown = $("#next-action-countdown");
-    if (!countdown) return;
-    countdown.textContent = L.travelCountdown(countdown.dataset.nextAt ? Number(countdown.dataset.nextAt) : null);
+    if (countdown) countdown.textContent = L.travelCountdown(countdown.dataset.nextAt ? Number(countdown.dataset.nextAt) : null);
+    const flightCountdown = $("#flight-watch-countdown");
+    if (flightCountdown) flightCountdown.textContent = L.travelCountdown(flightCountdown.dataset.nextAt ? Number(flightCountdown.dataset.nextAt) : null);
   }
 
   function renderCommandCenter() {
@@ -635,6 +686,13 @@
     const timeline = L.travelTimeline(itinerary, new Date(), 8);
     const live = liveTravelState(focusDay);
     const nextAction = live.nextAction;
+    const currentFlightWatch = flightWatch?.flightNumber === live.flight?.flightNumber && flightWatch?.date === live.flight?.date ? flightWatch : null;
+    const flightStatus = currentFlightWatch?.statusLabel || live.flight?.actualStatus || "等待确认";
+    const watchedFlight = flightWatch || flightWatchInput || (live.flight ? { flightNumber: live.flight.flightNumber, date: live.flight.date } : null);
+    const watchedTarget = L.flightWatchTarget(flightWatch);
+    const flightTargetAt = watchedTarget ? Date.parse(watchedTarget) : nextAction?.type === "航班" ? nextAction.at : null;
+    const watchedDeparture = flightWatch?.departure || { airport: live.flight?.departureAirport, estimatedTime: live.flight?.departureTime };
+    const watchedArrival = flightWatch?.arrival || { airport: live.flight?.arrivalAirport, estimatedTime: live.flight?.arrivalTime };
     const todayExpenses = (sharedSnapshot.expenses || []).filter((expense) => expense.incurredOn === focusDay.date);
     const expenseTotals = L.expenseLedgerTotals(todayExpenses);
     const recentChanges = L.recentSharedChanges(sharedSnapshot.itineraryOverrides, sharedSnapshot.expenses);
@@ -649,11 +707,19 @@
         <p class="eyebrow">今日模式 · ${esc(L.formatDate(focusDay.date, { month: "numeric", day: "numeric", weekday: "short" }))} · ${esc(phaseLabel)}</p>
         <h1>${esc(DATA.meta.title)}</h1>
         <div class="command-travel-meta">
-          <div><span>当前有效航班</span><strong>${esc(live.flight?.flightNumber || "暂无")}</strong><small>${live.flight ? `${esc(live.flight.date)} ${esc(live.flight.departureTime)} → ${esc(live.flight.arrivalTime)} · ${esc(labels[live.flight.status] || live.flight.status)} / ${esc(live.flight.actualStatus)}` : "等待后续航段"}</small></div>
+          <div><span>当前有效航班</span><strong>${esc(live.flight?.flightNumber || "暂无")}</strong><small>${live.flight ? `${esc(live.flight.date)} ${esc(live.flight.departureTime)} → ${esc(live.flight.arrivalTime)} · ${esc(labels[live.flight.status] || live.flight.status)} / ${esc(flightStatus)}` : "等待后续航段"}</small></div>
           <div><span>当前住宿</span><strong>${esc(live.hotel?.nameZh || "待确认")}</strong><small>${live.hotel ? `${esc(live.hotel.checkIn)} → ${esc(live.hotel.checkOut)}` : esc(focusDay.theme)}</small></div>
           <div><span>当前交通</span><strong>Day ${esc(dayNumber)} · ${esc(focusDay.city)}</strong><small>${esc(focusDay.transport)}</small></div>
         </div>
       </header>
+
+      <div class="section-head"><div><p class="eyebrow">Flight Watcher</p><h2>航班监控</h2></div><p>${flightWatch ? `${flightWatch.cached ? "页面缓存" : "实时查询"} · 5分钟` : "手动状态"}</p></div>
+      <article class="card flight-watcher-card">
+        <form id="flight-watcher-form" class="flight-watcher-form"><label class="field">航班号<input name="flightNumber" maxlength="8" value="${esc(watchedFlight?.flightNumber || "OD306")}" placeholder="OD306" required></label><label class="field">日期<input name="date" type="date" value="${esc(watchedFlight?.date || focusDay.date)}" required></label><button class="button primary" type="submit" ${flightWatchLoading || navigator.onLine === false ? "disabled" : ""}>${flightWatchLoading ? "查询中" : "查询"}</button></form>
+        <div class="flight-watch-grid"><div><span>航班状态</span><strong>${esc(flightWatch?.statusLabel || live.flight?.actualStatus || "等待确认")}</strong><small>${esc(flightWatch?.statusDetail || (flightWatchError ? "网络查询失败，使用手动状态" : "等待实时查询"))}</small></div><div><span>预计出发</span><strong>${esc(watchedDeparture.estimatedTime || "TBD")}</strong><small>${esc(watchedDeparture.airport || "TBD")}</small></div><div><span>预计抵达</span><strong>${esc(watchedArrival.estimatedTime || "TBD")}</strong><small>${esc(watchedArrival.airport || "TBD")}</small></div><div><span>航班倒计时</span><strong id="flight-watch-countdown" data-next-at="${esc(flightTargetAt ?? "")}">${esc(L.travelCountdown(flightTargetAt))}</strong><small>${esc(flightWatch?.source || "手动数据")}</small></div></div>
+        <p class="flight-watch-advice"><strong>出发建议</strong>${esc(L.flightDepartureAdvice(flightWatch))}</p>
+        ${flightWatchError ? `<p class="flight-watch-error" role="status">${esc(flightWatchError)}</p>` : ""}
+      </article>
 
       <div class="section-head"><div><p class="eyebrow">Next Action</p><h2>下一步</h2></div><p>${esc(focusDay.city)}</p></div>
       <article class="card command-next-action">
@@ -1493,6 +1559,11 @@
   }
 
   async function handleSubmit(event) {
+    if (event.target.id === "flight-watcher-form") {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      return loadFlightWatch({ flightNumber: form.get("flightNumber"), date: form.get("date") });
+    }
     if (event.target.id === "expense-ledger-form") {
       event.preventDefault();
       return saveExpenseEdit(event.target);
