@@ -23,7 +23,7 @@ vm.runInContext(fs.readFileSync("data/trip-data.js", "utf8"), dataContext);
 const data = dataContext.window.TRIP_DATA;
 const requiredSections = ["meta", "travelers", "route", "flights", "hotels", "weatherLocations", "hotelRegistry", "flightRegistry", "travelInbox", "documentRegistry", "documentReadiness", "itinerary", "transportPlan", "foodRecommendations", "travelTips", "departureChecklist", "finalDepartureChecklist", "departureCountdown", "riskAlerts", "coupleMoments", "tasks", "packing", "documents", "budget", "emergency", "gallery", "alerts", "changeLog"];
 requiredSections.forEach((key) => assert.ok(data[key], `缺少数据区块: ${key}`));
-assert.equal(data.meta.version, "1.5.0", "版本未更新");
+assert.equal(data.meta.version, "1.5.1", "版本未更新");
 assert.equal(data.meta.versionName, "Private Document Center", "版本名称未更新");
 data.weatherLocations.forEach((item) => ["id", "name", "latitude", "longitude", "timezone", "sea_condition"].forEach((key) => assert.ok(key in item, `天气地点缺少 ${key}`)));
 data.hotelRegistry.forEach((item) => ["hotel_name", "check_in", "check_out", "address", "check_time", "breakfast", "map_link", "status"].forEach((key) => assert.ok(key in item, `酒店Registry缺少 ${key}`)));
