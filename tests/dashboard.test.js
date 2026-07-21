@@ -23,8 +23,8 @@ vm.runInContext(fs.readFileSync("data/trip-data.js", "utf8"), dataContext);
 const data = dataContext.window.TRIP_DATA;
 const requiredSections = ["meta", "travelers", "route", "flights", "hotels", "weatherLocations", "hotelRegistry", "flightRegistry", "travelInbox", "documentRegistry", "documentReadiness", "itinerary", "transportPlan", "foodRecommendations", "travelTips", "departureChecklist", "finalDepartureChecklist", "departureCountdown", "riskAlerts", "coupleMoments", "tasks", "packing", "documents", "budget", "emergency", "gallery", "alerts", "changeLog"];
 requiredSections.forEach((key) => assert.ok(data[key], `缺少数据区块: ${key}`));
-assert.equal(data.meta.version, "1.5.6", "版本未更新");
-assert.equal(data.meta.versionName, "Flight Watcher", "版本名称未更新");
+assert.equal(data.meta.version, "1.5.7", "版本未更新");
+assert.equal(data.meta.versionName, "Smart Public Travel Command Center", "版本名称未更新");
 data.weatherLocations.forEach((item) => ["id", "name", "latitude", "longitude", "timezone", "sea_condition"].forEach((key) => assert.ok(key in item, `天气地点缺少 ${key}`)));
 data.hotelRegistry.forEach((item) => ["hotel_name", "check_in", "check_out", "address", "check_time", "breakfast", "map_link", "status"].forEach((key) => assert.ok(key in item, `酒店Registry缺少 ${key}`)));
 data.flightRegistry.forEach((item) => ["flight_number", "departure", "arrival", "status"].forEach((key) => assert.ok(key in item, `航班Registry缺少 ${key}`)));
@@ -49,6 +49,7 @@ data.itinerary.forEach((day) => ["date", "city", "theme", "keywords", "transport
 data.flights.concat(data.hotels).forEach((item) => assert.ok(["pending", "confirmed", "changed", "cancelled"].includes(item.status), `非法状态: ${item.id}`));
 assert.equal(data.flights.find((flight) => flight.id === "flight-3u3995").departureTime, "09:40", "3U3995时间错误");
 assert.equal(data.flights.find((flight) => flight.id === "flight-kl-bali").flightNumber, "OD306", "当前有效航班未更新为OD306");
+assert.equal(data.itinerary.find((day) => day.date === "2026-07-23").theme, "佩妮达岛西线 + 浮潜", "公开活动安排不是当前版本");
 assert.equal(data.flights.find((flight) => flight.id === "flight-bali-kl").flightNumber, "OD307", "OD307缺失");
 assert.equal(data.flights.find((flight) => flight.id === "flight-3u3994").departureTime, "00:20", "3U3994时间错误");
 data.transportPlan.flatMap((plan) => plan.legs).forEach((leg) => ["recommendedMode", "estimatedDuration", "reservationRequired", "budget"].forEach((key) => assert.ok(key in leg, `交通段缺少 ${key}`)));
@@ -64,7 +65,7 @@ assert.ok(index.indexOf("config/sync-config.js") < index.indexOf("js/sync.js") &
 assert.ok(index.indexOf("data/trip-data.js") < index.indexOf("data/offline-pack.js") && index.indexOf("data/offline-pack.js") < index.indexOf("js/app.js"), "Offline Pack脚本加载顺序错误");
 assert.ok(index.indexOf("js/weather.js") < index.indexOf("js/app.js"), "天气脚本加载顺序错误");
 assert.ok(index.indexOf("js/documents.js") < index.indexOf("js/app.js"), "私人资料脚本加载顺序错误");
-assert.match(serviceWorker, /CACHE_VERSION = "v1\.5\.6"/, "Service Worker缓存版本未更新");
+assert.match(serviceWorker, /CACHE_VERSION = "v1\.5\.7"/, "Service Worker缓存版本未更新");
 assert.match(serviceWorker, /js\/flight-watcher\.js/, "Flight Watcher客户端未加入应用壳");
 assert.match(serviceWorker, /config\/sync-config\.js/, "同步配置未加入离线缓存");
 assert.match(serviceWorker, /js\/sync\.js/, "同步逻辑未加入离线缓存");

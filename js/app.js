@@ -180,7 +180,6 @@
   let sharedDataLoading = false;
   let flightWatch = null;
   let flightWatchRun;
-  let flightWatchInput = null;
   let flightWatchRequestVersion = 0;
   let flightWatchLoading = false;
   let flightWatchError = "";
@@ -482,7 +481,6 @@
     sharedDataLoading = false;
     flightWatch = null;
     flightWatchRun = null;
-    flightWatchInput = null;
     flightWatchRequestVersion += 1;
     flightWatchLoading = false;
     flightWatchError = "";
@@ -507,6 +505,7 @@
     switchView("documents", false);
     showToast(message);
     await signOutRun;
+    loadFlightWatch();
     return message;
   }
 
@@ -612,11 +611,9 @@
     return run;
   }
 
-  function commandCenterActive() {
-    return documentService.authenticated && sharedDataService.configured && Boolean(sharedSnapshot);
-  }
-
   function commandSyncState() {
+    if (!documentService.authenticated) return { key: "public", label: "公开模式", detail: "登录后可编辑行程、费用与私人文件" };
+    if (!sharedSnapshot) return { key: "saving", label: "同步中", detail: "正在读取共享旅行数据" };
     if (itineraryConflict || expenseConflict) return { key: "conflict", label: "冲突", detail: "共享记录已有更新，请重新打开后处理" };
     if (navigator.onLine === false) return { key: "offline", label: "离线只读", detail: "保留当前内存快照，联网后再写入" };
     if (itinerarySaving || expenseSaving || expenseDeletingId || pendingPrivateUploads > 0) return { key: "saving", label: "保存中", detail: "正在写入共享旅行数据" };
@@ -627,38 +624,46 @@
     return ITINERARY_PERIODS.find(([name]) => name === period)?.[1] || period;
   }
 
-  function liveTravelState(day) {
+  function liveTravelState(day, now) {
+    const reference = now || new Date();
+    const today = L.dateKey(reference);
+    const time = `${String(reference.getHours()).padStart(2, "0")}:${String(reference.getMinutes()).padStart(2, "0")}`;
     const flights = DATA.flights.map((flight) => ({ ...flight, ...state.flights[flight.id] }));
     const hotels = DATA.hotels.map((hotel) => ({ ...hotel, ...state.hotels[hotel.id] }));
     return {
-      flight: L.nextActiveFlight(flights),
-      hotel: hotels.filter((hotel) => hotel.status !== "cancelled" && hotel.checkIn <= day.date && hotel.checkOut >= day.date).sort((a, b) => b.checkIn.localeCompare(a.checkIn))[0] || null,
-      nextAction: L.nextTravelAction(day, flights, hotels)
+      flights: L.activeFlights(flights, now),
+      flight: L.nextActiveFlight(flights, now),
+      hotel: hotels.filter((hotel) => {
+        if (hotel.status === "cancelled" || hotel.checkIn > day.date || hotel.checkOut < day.date) return false;
+        if (day.date !== today) return true;
+        const checkout = String(hotel.notes || "").match(/(?:退房[^。；]*?(\d{2}:\d{2})|(\d{2}:\d{2})\s*退房)/)?.slice(1).find(Boolean) || "11:00";
+        return !(hotel.checkIn === today && time < "15:00") && !(hotel.checkOut === today && time >= checkout);
+      }).sort((a, b) => b.checkIn.localeCompare(a.checkIn))[0] || null,
+      nextAction: L.nextTravelAction(day, flights, hotels, now, sharedSnapshot?.expenses || [])
     };
   }
 
-  function loadFlightWatch(input) {
-    if (!documentService.authenticated || !flightWatcherService.configured || navigator.onLine === false) return Promise.resolve(null);
+  function loadFlightWatch() {
+    if (!flightWatcherService.configured || navigator.onLine === false) return Promise.resolve(null);
     if (flightWatchRun) return flightWatchRun;
     const itinerary = itineraryDays();
     const current = L.currentItinerary(itinerary);
     const focusDay = current || itinerary[0];
     const active = liveTravelState(focusDay).flight;
-    const query = input || (active ? { flightNumber: active.flightNumber, date: active.date } : null);
+    const query = active ? { flightNumber: active.flightNumber, date: active.date } : null;
     if (!query) return Promise.resolve(null);
     const runVersion = ++flightWatchRequestVersion;
-    flightWatchInput = { flightNumber: String(query.flightNumber || "").toUpperCase().replace(/[\s-]+/g, ""), date: String(query.date || "") };
     flightWatchLoading = true;
     flightWatchError = "";
     renderHome();
     const run = flightWatcherService.query(query).then((value) => {
-      if (runVersion === flightWatchRequestVersion && documentService.authenticated) flightWatch = value;
+      if (runVersion === flightWatchRequestVersion) flightWatch = value;
       return value;
     }).catch(async (error) => {
       if (runVersion !== flightWatchRequestVersion) return null;
       flightWatch = null;
       flightWatchError = error?.message || "航班网络查询失败，已保留手动状态";
-      if (error?.status === 401) await resetPrivateSession("登录已失效，请重新登录");
+      if (error?.status === 401 && documentService.authenticated) await resetPrivateSession("登录已失效，请重新登录");
       return null;
     }).finally(() => {
       if (runVersion !== flightWatchRequestVersion) return;
@@ -679,46 +684,52 @@
 
   function renderCommandCenter() {
     const itinerary = itineraryDays();
+    const now = new Date();
     const trip = L.tripMoment(DATA.meta);
     const current = L.currentItinerary(itinerary);
     const focusDay = current || (trip.phase === "upcoming" ? itinerary[0] : itinerary.at(-1));
     const dayNumber = Math.max(1, itinerary.findIndex((day) => day.id === focusDay.id) + 1);
-    const timeline = L.travelTimeline(itinerary, new Date(), 8);
-    const live = liveTravelState(focusDay);
+    const timeline = L.travelTimeline(itinerary, now, 8);
+    const live = liveTravelState(focusDay, now);
     const nextAction = live.nextAction;
     const currentFlightWatch = flightWatch?.flightNumber === live.flight?.flightNumber && flightWatch?.date === live.flight?.date ? flightWatch : null;
-    const flightStatus = currentFlightWatch?.statusLabel || live.flight?.actualStatus || "等待确认";
-    const watchedFlight = flightWatch || flightWatchInput || (live.flight ? { flightNumber: live.flight.flightNumber, date: live.flight.date } : null);
-    const watchedTarget = L.flightWatchTarget(flightWatch);
+    const flightStatus = L.flightStatusLabel(currentFlightWatch, live.flight);
+    const watchedTarget = L.flightWatchTarget(currentFlightWatch);
     const flightTargetAt = watchedTarget ? Date.parse(watchedTarget) : nextAction?.type === "航班" ? nextAction.at : null;
-    const watchedDeparture = flightWatch?.departure || { airport: live.flight?.departureAirport, estimatedTime: live.flight?.departureTime };
-    const watchedArrival = flightWatch?.arrival || { airport: live.flight?.arrivalAirport, estimatedTime: live.flight?.arrivalTime };
-    const todayExpenses = (sharedSnapshot.expenses || []).filter((expense) => expense.incurredOn === focusDay.date);
+    const watchedDeparture = currentFlightWatch?.departure || { airport: live.flight?.departureCode, estimatedTime: live.flight?.departureTime };
+    const watchedArrival = currentFlightWatch?.arrival || { airport: live.flight?.arrivalCode, estimatedTime: live.flight?.arrivalTime };
+    const privateMode = documentService.authenticated && Boolean(sharedSnapshot);
+    const todayExpenses = privateMode ? sharedSnapshot.expenses.filter((expense) => expense.incurredOn === focusDay.date) : [];
     const expenseTotals = L.expenseLedgerTotals(todayExpenses);
-    const recentChanges = L.recentSharedChanges(sharedSnapshot.itineraryOverrides, sharedSnapshot.expenses);
-    const documents = documentCounts();
+    const recentChanges = privateMode ? L.recentSharedChanges(sharedSnapshot.itineraryOverrides, sharedSnapshot.expenses) : [];
+    const documents = privateMode ? documentCounts() : { total: 0 };
     const sync = commandSyncState();
-    const writesDisabled = sync.key === "offline" || sync.key === "saving" || sharedDataLoading;
+    const writesDisabled = documentService.authenticated && (!privateMode || sync.key === "offline" || sync.key === "saving" || sharedDataLoading);
     const phaseLabel = trip.phase === "upcoming" ? "即将出发" : trip.phase === "traveling" ? "旅行进行中" : "旅行已结束";
+    const nextActivity = itinerary.find((day) => day.date >= focusDay.date && !/(航班|返程|住宿|酒店|交通|Airbnb|民宿)/i.test(day.theme));
+    const nextTransport = live.flight ? `${live.flight.flightNumber} · ${live.flight.departureCode} → ${live.flight.arrivalCode}` : focusDay.transport;
+    const currentLocation = live.hotel ? live.hotel.nameZh.includes("吉隆坡") ? "吉隆坡" : "巴厘岛" : focusDay.city;
 
     $("#view-home").innerHTML = `<div class="command-center">
       <header class="command-header">
-        <div class="command-header-top"><span class="command-private-label">Travel Day Mode · Realtime Travel Status</span><span class="command-sync-chip ${sync.key}" role="status" aria-live="polite">${esc(sync.label)}</span></div>
+        <div class="command-header-top"><span class="command-private-label">Smart Public Travel Command Center</span><span class="command-sync-chip ${sync.key}" role="status" aria-live="polite">${esc(sync.label)}</span></div>
         <p class="eyebrow">今日模式 · ${esc(L.formatDate(focusDay.date, { month: "numeric", day: "numeric", weekday: "short" }))} · ${esc(phaseLabel)}</p>
         <h1>${esc(DATA.meta.title)}</h1>
         <div class="command-travel-meta">
-          <div><span>当前有效航班</span><strong>${esc(live.flight?.flightNumber || "暂无")}</strong><small>${live.flight ? `${esc(live.flight.date)} ${esc(live.flight.departureTime)} → ${esc(live.flight.arrivalTime)} · ${esc(labels[live.flight.status] || live.flight.status)} / ${esc(flightStatus)}` : "等待后续航段"}</small></div>
+          <div><span>当前地点</span><strong>${esc(currentLocation)}</strong><small>Day ${esc(dayNumber)} · ${esc(focusDay.theme)}</small></div>
           <div><span>当前住宿</span><strong>${esc(live.hotel?.nameZh || "待确认")}</strong><small>${live.hotel ? `${esc(live.hotel.checkIn)} → ${esc(live.hotel.checkOut)}` : esc(focusDay.theme)}</small></div>
-          <div><span>当前交通</span><strong>Day ${esc(dayNumber)} · ${esc(focusDay.city)}</strong><small>${esc(focusDay.transport)}</small></div>
+          <div><span>下一交通</span><strong>${esc(nextTransport)}</strong><small>${live.flight ? `${esc(live.flight.date)} ${esc(live.flight.departureTime)}` : esc(focusDay.transport)}</small></div>
+          <div><span>下一活动</span><strong>${esc(nextActivity?.theme || "等待安排")}</strong><small>${esc(nextActivity ? L.formatDate(nextActivity.date, { month: "numeric", day: "numeric", weekday: "short" }) : "暂无后续活动")}</small></div>
         </div>
       </header>
 
-      <div class="section-head"><div><p class="eyebrow">Flight Watcher</p><h2>航班监控</h2></div><p>${flightWatch ? `${flightWatch.cached ? "页面缓存" : "实时查询"} · 5分钟` : "手动状态"}</p></div>
+      <div class="section-head"><div><p class="eyebrow">Flight Smart Binding</p><h2>✈ 下一航班</h2></div><p>${currentFlightWatch ? `${currentFlightWatch.cached ? "页面缓存" : "实时状态"} · 5分钟` : "行程自动绑定"}</p></div>
       <article class="card flight-watcher-card">
-        <form id="flight-watcher-form" class="flight-watcher-form"><label class="field">航班号<input name="flightNumber" maxlength="8" value="${esc(watchedFlight?.flightNumber || "OD306")}" placeholder="OD306" required></label><label class="field">日期<input name="date" type="date" value="${esc(watchedFlight?.date || focusDay.date)}" required></label><button class="button primary" type="submit" ${flightWatchLoading || navigator.onLine === false ? "disabled" : ""}>${flightWatchLoading ? "查询中" : "查询"}</button></form>
-        <div class="flight-watch-grid"><div><span>航班状态</span><strong>${esc(flightWatch?.statusLabel || live.flight?.actualStatus || "等待确认")}</strong><small>${esc(flightWatch?.statusDetail || (flightWatchError ? "网络查询失败，使用手动状态" : "等待实时查询"))}</small></div><div><span>预计出发</span><strong>${esc(watchedDeparture.estimatedTime || "TBD")}</strong><small>${esc(watchedDeparture.airport || "TBD")}</small></div><div><span>预计抵达</span><strong>${esc(watchedArrival.estimatedTime || "TBD")}</strong><small>${esc(watchedArrival.airport || "TBD")}</small></div><div><span>航班倒计时</span><strong id="flight-watch-countdown" data-next-at="${esc(flightTargetAt ?? "")}">${esc(L.travelCountdown(flightTargetAt))}</strong><small>${esc(flightWatch?.source || "手动数据")}</small></div></div>
-        <p class="flight-watch-advice"><strong>出发建议</strong>${esc(L.flightDepartureAdvice(flightWatch))}</p>
+        <div class="flight-watch-title"><div><span>${esc(live.flight?.date || "")}</span><strong>${esc(live.flight?.flightNumber || "暂无后续航班")}</strong><small>${live.flight ? `${esc(live.flight.departureCode)} → ${esc(live.flight.arrivalCode)}` : "旅行航班已完成"}</small></div><span class="flight-smart-status">${esc(flightStatus)}</span></div>
+        <div class="flight-watch-grid"><div><span>航班状态</span><strong>${esc(flightStatus)}</strong><small>${esc(currentFlightWatch?.statusDetail || (flightWatchError ? "网络查询失败，使用手动状态" : flightWatchLoading ? "正在更新实时状态" : "行程 / Flight Center"))}</small></div><div><span>预计出发</span><strong>${esc(watchedDeparture.estimatedTime || "TBD")}</strong><small>${esc(watchedDeparture.airport || "TBD")}</small></div><div><span>预计抵达</span><strong>${esc(watchedArrival.estimatedTime || "TBD")}</strong><small>${esc(watchedArrival.airport || "TBD")}</small></div><div><span>航班倒计时</span><strong id="flight-watch-countdown" data-next-at="${esc(flightTargetAt ?? "")}">${esc(L.travelCountdown(flightTargetAt))}</strong><small>${esc(currentFlightWatch?.source || "手动状态")}</small></div></div>
+        <p class="flight-watch-advice"><strong>出发建议</strong>${esc(L.flightDepartureAdvice(currentFlightWatch))}</p>
         ${flightWatchError ? `<p class="flight-watch-error" role="status">${esc(flightWatchError)}</p>` : ""}
+        <div class="flight-smart-list">${live.flights.map((flight, index) => `<div class="flight-smart-row ${index === 0 ? "current" : ""}"><span>${esc(flight.date)}</span><strong>${esc(flight.flightNumber)} · ${esc(flight.departureCode)} → ${esc(flight.arrivalCode)}</strong><small>${esc(index === 0 ? flightStatus : L.flightStatusLabel(null, flight))}</small></div>`).join("")}</div>
       </article>
 
       <div class="section-head"><div><p class="eyebrow">Next Action</p><h2>下一步</h2></div><p>${esc(focusDay.city)}</p></div>
@@ -730,35 +741,37 @@
       <div class="section-head"><div><p class="eyebrow">Trip Timeline</p><h2>旅行时间轴</h2></div><p>${timeline.length}项</p></div>
       <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${nextAction?.type === "行程" && item.id === nextAction.id ? "next" : ""}"><time>${esc(item.dateLabel)}<br>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(commandPeriodLabel(item.period))}</small></div></div>`).join("") : '<p class="empty">暂无后续活动</p>'}</div>
 
-      <div class="section-head"><div><p class="eyebrow">Expense Snapshot</p><h2>今日费用</h2></div><p>${todayExpenses.length}笔 · 不换汇</p></div>
+      ${privateMode ? `<div class="section-head"><div><p class="eyebrow">Expense Snapshot</p><h2>今日费用</h2></div><p>${todayExpenses.length}笔 · 不换汇</p></div>
       <div class="command-expense-snapshot">${EXPENSE_CURRENCIES.map((currency) => {
         const values = expenseTotals[currency];
         const spending = values.paid + values.pending;
         return `<article class="card command-expense-currency"><span>${currency}</span><strong>${esc(L.formatExpenseAmount(spending, currency))}</strong><small>已付 ${esc(L.formatExpenseAmount(values.paid, currency))}<br>待付 ${esc(L.formatExpenseAmount(values.pending, currency))} · 退款 ${esc(L.formatExpenseAmount(values.refunded, currency))}</small></article>`;
-      }).join("")}</div>
+      }).join("")}</div>` : ""}
 
-      <div class="section-head"><div><p class="eyebrow">Recent Changes</p><h2>最近修改</h2></div><p>${recentChanges.length}项</p></div>
+      ${privateMode ? `<div class="section-head"><div><p class="eyebrow">Recent Changes</p><h2>最近修改</h2></div><p>${recentChanges.length}项</p></div>
       <article class="card">${recentChanges.length ? `<div class="today-list">${recentChanges.map((change) => `<div class="today-row"><span>${esc(change.type)}</span><div><strong>${esc(change.title)}</strong><small>${esc(formatUpdated(change.updatedAt))}</small></div></div>`).join("")}</div>` : '<p class="empty">暂无共享修改</p>'}</article>
+      ` : ""}
 
       <div class="section-head"><div><p class="eyebrow">Quick Actions</p><h2>快速操作</h2></div></div>
       <div class="command-quick-actions">
-        <button class="button command-action" type="button" data-command-itinerary="${esc(focusDay.id)}" ${writesDisabled ? "disabled" : ""}><strong>编辑今日行程</strong><small>Day ${esc(dayNumber)}</small></button>
-        <button class="button command-action" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}><strong>记一笔</strong><small>共享费用</small></button>
-        <button class="button command-action" type="button" data-command-upload ${writesDisabled ? "disabled" : ""}><strong>上传资料</strong><small>${documentsLoading ? "读取中" : `${esc(documents.total)}份文件`}</small></button>
+        <button class="button command-action" type="button" data-command-itinerary="${esc(focusDay.id)}" ${writesDisabled ? "disabled" : ""}><strong>编辑今日行程</strong><small>${privateMode ? `Day ${esc(dayNumber)}` : "登录后编辑"}</small></button>
+        <button class="button command-action" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}><strong>记一笔</strong><small>${privateMode ? "共享费用" : "登录后记账"}</small></button>
+        <button class="button command-action" type="button" data-command-upload ${writesDisabled ? "disabled" : ""}><strong>上传资料</strong><small>${privateMode ? documentsLoading ? "读取中" : `${esc(documents.total)}份文件` : "登录后上传"}</small></button>
         <button class="button command-action" type="button" data-go="documents"><strong>文件中心</strong><small>Private Bucket</small></button>
       </div>
 
-      <div class="section-head"><div><p class="eyebrow">Sync Status</p><h2>同步状态</h2></div></div>
+      ${privateMode ? `<div class="section-head"><div><p class="eyebrow">Sync Status</p><h2>同步状态</h2></div></div>
       <article class="card command-sync-panel">
         <div class="command-sync-summary"><span class="command-sync-chip ${sync.key}">${esc(sync.label)}</span><div><strong>${esc(sync.detail)}</strong><small>${sharedSnapshot.loadedAt ? `刷新于 ${esc(formatUpdated(sharedSnapshot.loadedAt))}` : "等待首次同步"}</small></div></div>
         <div class="command-sync-grid"><div><span>共享行程</span><strong>${sharedSnapshot.itineraryOverrides.length}天</strong></div><div><span>费用账本</span><strong>${sharedSnapshot.expenses.length}笔</strong></div><div><span>私人资料</span><strong>${documents.total}份</strong></div><div><span>同步方式</span><strong>手动刷新</strong></div></div>
         <div class="card-actions"><button class="button small" type="button" data-command-refresh ${navigator.onLine === false || sharedDataLoading ? "disabled" : ""}>${sharedDataLoading ? "刷新中" : "刷新共享数据"}</button></div>
       </article>
+      ` : ""}
     </div>`;
   }
 
   function renderHome() {
-    if (commandCenterActive()) return renderCommandCenter();
+    return renderCommandCenter();
     const itinerary = itineraryDays();
     const trip = L.tripMoment(DATA.meta);
     const current = L.currentItinerary(itinerary);
@@ -1436,6 +1449,7 @@
     if (copy) return copyText(copy.dataset.copy);
     const commandItinerary = event.target.closest("[data-command-itinerary]");
     if (commandItinerary) {
+      if (!documentService.authenticated) { switchView("documents"); showToast("登录后才能编辑行程"); return; }
       if (navigator.onLine === false) return showToast("当前离线，只能查看已有数据");
       switchView("itinerary");
       if (itineraryEdit) $("#itinerary-override-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1443,6 +1457,7 @@
       return;
     }
     if (event.target.closest("[data-command-expense]")) {
+      if (!documentService.authenticated) { switchView("documents"); showToast("登录后才能记账"); return; }
       if (navigator.onLine === false) return showToast("当前离线，只能查看已有数据");
       switchView("budget");
       if (expenseEdit) $("#expense-ledger-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1450,6 +1465,7 @@
       return;
     }
     if (event.target.closest("[data-command-upload]")) {
+      if (!documentService.authenticated) { switchView("documents"); showToast("登录后才能上传文件"); return; }
       if (navigator.onLine === false) return showToast("当前离线，无法上传资料");
       switchView("documents");
       requestAnimationFrame(() => {
@@ -1531,7 +1547,7 @@
       save(); renderBudget(); showToast("预算已保存在本机"); return;
     }
     const flight = event.target.dataset.flight;
-    if (flight) { state.flights[flight] ||= {}; state.flights[flight][event.target.dataset.field] = event.target.value; save(); renderBookings(); renderMore(); showToast("航班状态已更新"); return; }
+    if (flight) { state.flights[flight] ||= {}; state.flights[flight][event.target.dataset.field] = event.target.value; save(); flightWatch = null; flightWatcherService.clear(); renderHome(); renderBookings(); renderMore(); loadFlightWatch(); showToast("航班状态已更新"); return; }
     const hotel = event.target.dataset.hotel;
     if (hotel) { state.hotels[hotel] ||= {}; state.hotels[hotel][event.target.dataset.field] = event.target.value; save(); renderBookings(); renderMore(); showToast("酒店状态已更新"); }
   }
@@ -1559,11 +1575,6 @@
   }
 
   async function handleSubmit(event) {
-    if (event.target.id === "flight-watcher-form") {
-      event.preventDefault();
-      const form = new FormData(event.target);
-      return loadFlightWatch({ flightNumber: form.get("flightNumber"), date: form.get("date") });
-    }
     if (event.target.id === "expense-ledger-form") {
       event.preventDefault();
       return saveExpenseEdit(event.target);
@@ -1775,6 +1786,7 @@
       if (navigator.onLine) {
         syncChecklistFromCloud();
         if (!Object.keys(weatherByLocation).length) loadWeatherData();
+        if (!flightWatch) loadFlightWatch();
       } else checklistSync.markOffline();
       renderHome();
     };
@@ -1821,6 +1833,7 @@
     window.setInterval(updateTravelCountdown, 30000);
     switchView("home", false);
     if (documentService.hasSession) verifyPrivateSession();
+    else loadFlightWatch();
   }
 
   try {

@@ -1,7 +1,6 @@
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const FLIGHT_NUMBER = /^([A-Z0-9]{2})(\d{1,4}[A-Z]?)$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CARRIER_ALIASES: Record<string, string> = { OD: "MXD", "3U": "CSC" };
 const cache = new Map<string, { expiresAt: number; value: FlightStatus }>();
 
@@ -55,17 +54,6 @@ function validDate(value: string) {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-function authenticatedUser(request: Request) {
-  const token = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "") || "";
-  try {
-    const encoded = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const claims = JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=")));
-    return claims.role === "authenticated" && UUID.test(String(claims.sub || "")) && Number(claims.exp) > Date.now() / 1000;
-  } catch (_) {
-    return false;
-  }
-}
-
 function extractFlight(html: string) {
   const match = html.match(/__NEXT_DATA__\s*=\s*({.*?});__NEXT_LOADED_PAGES__/s);
   if (!match) throw new Error("公开航班页面格式已变化");
@@ -108,7 +96,7 @@ async function lookup(flightNumber: string, date: string): Promise<FlightStatus>
   const [year, month, day] = date.split("-").map(Number);
   const sourceUrl = `https://www.flightstats.com/v2/flight-tracker/${encodeURIComponent(carrier)}/${encodeURIComponent(match[2])}?year=${year}&month=${month}&date=${day}`;
   const response = await fetch(sourceUrl, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; Malaysia-Bali-Flight-Watcher/1.5.6)" },
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; Malaysia-Bali-Flight-Watcher/1.5.7)" },
     signal: AbortSignal.timeout(6500)
   });
   if (!response.ok) throw new Error(`公开航班查询 HTTP ${response.status}`);
@@ -133,7 +121,6 @@ Deno.serve(async (request) => {
   const origin = request.headers.get("Origin");
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors(origin) });
   if (request.method !== "POST") return json({ message: "只支持 POST" }, 405, origin);
-  if (!authenticatedUser(request)) return json({ message: "请先登录后查询航班" }, 401, origin);
   try {
     const body = await request.json();
     const flightNumber = String(body?.flightNumber || "").toUpperCase().replace(/[\s-]+/g, "");

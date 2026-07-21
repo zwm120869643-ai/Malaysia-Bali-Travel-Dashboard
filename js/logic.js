@@ -229,16 +229,30 @@
     return value;
   }
 
-  function nextActiveFlight(flights, now) {
+  function activeFlights(flights, now) {
     const reference = now || new Date();
     return (flights || [])
       .filter((flight) => flight.status !== "cancelled" && !["取消", "已完成"].includes(flight.actualStatus))
       .map((flight) => ({ flight, departure: travelDateTime(flight.date, flight.departureTime), arrival: travelDateTime(flight.date, flight.arrivalTime) }))
       .filter((item) => item.departure && item.arrival && item.arrival >= reference)
-      .sort((a, b) => a.departure - b.departure)[0]?.flight || null;
+      .sort((a, b) => a.departure - b.departure)
+      .map((item) => item.flight);
   }
 
-  function nextTravelAction(day, flights, hotels, now) {
+  function nextActiveFlight(flights, now) {
+    return activeFlights(flights, now)[0] || null;
+  }
+
+  function flightStatusLabel(watch, flight) {
+    if (/boarding/i.test(watch?.statusDetail || "")) return "Boarding";
+    if (watch?.status === "cancelled" || flight?.status === "cancelled" || flight?.actualStatus === "取消") return "Cancelled";
+    if (watch?.status === "arrived" || ["已抵达", "已完成"].includes(flight?.actualStatus)) return "Landed";
+    if (watch?.status === "en_route" || ["已起飞", "飞行中"].includes(flight?.actualStatus)) return "Departed";
+    if (watch?.status === "delayed" || flight?.actualStatus === "延误") return "Delayed";
+    return "Scheduled";
+  }
+
+  function nextTravelAction(day, flights, hotels, now, expenses) {
     const reference = now || new Date();
     const flight = nextActiveFlight(flights, reference);
     if (flight && daysBetween(dateKey(reference), flight.date) <= 1) {
@@ -252,11 +266,18 @@
         location: `${flight.departureAirport} → ${flight.arrivalAirport}`
       };
     }
-    const hotel = (hotels || [])
-      .filter((item) => item.status !== "cancelled" && item.checkIn <= day?.date && item.checkOut >= day?.date)
-      .sort((a, b) => b.checkIn.localeCompare(a.checkIn))[0];
-    if (hotel) return { type: "酒店", id: hotel.id, timeLabel: hotel.checkOut === day.date ? "退房" : "住宿", title: hotel.nameZh || hotel.name, location: hotel.address || day.city };
-    if (String(day?.transport || "").trim()) return { type: "交通", id: "transport", timeLabel: "待定", title: day.transport, location: day.city };
+    const hotelAction = (hotels || []).filter((hotel) => hotel.status !== "cancelled").flatMap((hotel) => {
+      const noteTime = String(hotel.notes || "").match(/(?:退房[^。；]*?(\d{2}:\d{2})|(\d{2}:\d{2})\s*退房)/)?.slice(1).find(Boolean);
+      return [
+        { type: "退房", date: hotel.checkOut, time: noteTime || "11:00", title: `退房 · ${hotel.nameZh || hotel.name}` },
+        { type: "入住", date: hotel.checkIn, time: "15:00", title: `入住 · ${hotel.nameZh || hotel.name}` }
+      ].map((action) => ({ ...action, id: `${hotel.id}-${action.type}`, at: travelDateTime(action.date, action.time), location: hotel.address || day?.city }));
+    }).filter((action) => action.at && action.at >= reference).sort((a, b) => a.at - b.at)[0];
+    if (hotelAction && daysBetween(dateKey(reference), hotelAction.date) <= 1) return { ...hotelAction, at: hotelAction.at.getTime(), timeLabel: `${formatDate(hotelAction.date, { month: "numeric", day: "numeric" })} ${hotelAction.time}` };
+    const transport = String(day?.transport || "").trim();
+    if (transport) return { type: "交通", id: "transport", timeLabel: transport.match(/\b\d{2}:\d{2}\b/)?.[0] || "待定", title: transport, location: day.city };
+    const paidActivity = (expenses || []).filter((item) => item.paymentStatus === "paid" && ["sea", "attractions"].includes(item.category) && item.incurredOn >= dateKey(reference)).sort((a, b) => a.incurredOn.localeCompare(b.incurredOn))[0];
+    if (paidActivity) return { type: "已付款活动", id: paidActivity.id, timeLabel: formatDate(paidActivity.incurredOn, { month: "numeric", day: "numeric" }), title: paidActivity.title, location: day?.city };
     const itinerary = nextItineraryEvent(day, reference);
     return itinerary ? { ...itinerary, type: "行程", at: travelDateTime(day.date, itinerary.time)?.getTime() ?? null, title: itinerary.text, location: day.city } : null;
   }
@@ -354,5 +375,5 @@
     return Boolean(role && (expense?.createdBy === currentUserId || role === "owner"));
   }
 
-  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, nextActiveFlight, nextTravelAction, travelCountdown, flightWatchTarget, flightDepartureAdvice, travelTimeline, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
+  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, activeFlights, nextActiveFlight, flightStatusLabel, nextTravelAction, travelCountdown, flightWatchTarget, flightDepartureAdvice, travelTimeline, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
 })(typeof window !== "undefined" ? window : globalThis);

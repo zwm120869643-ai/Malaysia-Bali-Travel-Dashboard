@@ -68,13 +68,13 @@
       if (existing && existing.expiresAt > now()) return { ...existing.value, cached: true };
       if (!config.configured || typeof request !== "function") throw new Error("航班查询服务尚未配置");
       const session = await provideSession?.();
-      if (!session?.access_token) throw new Error("请先登录后查询航班");
+      const token = session?.access_token || config.publishableKey;
       const controller = typeof AbortController === "function" ? new AbortController() : null;
       const timeout = controller ? setTimeout(() => controller.abort(), 8000) : null;
       try {
         const response = await request(`${config.supabaseUrl}/functions/v1/flight-watcher`, {
           method: "POST",
-          headers: { apikey: config.publishableKey, Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+          headers: { apikey: config.publishableKey, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify(value),
           signal: controller?.signal,
           cache: "no-store"

@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.5.6",
-    versionName: "Flight Watcher",
-    versionLabel: "航班监控版",
-    lastUpdated: "2026-07-21T23:18:15+08:00",
+    version: "1.5.7",
+    versionName: "Smart Public Travel Command Center",
+    versionLabel: "公开智能旅行指挥中心版",
+    lastUpdated: "2026-07-22T00:05:00+08:00",
     weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -73,6 +73,7 @@ window.TRIP_DATA = {
   flights: [
     {
       id: "flight-3u3995", airline: "四川航空", flightNumber: "3U3995", date: "2026-07-20",
+      departureCode: "TFU", arrivalCode: "KUL",
       departureTime: "09:40", arrivalTime: "14:20", departureAirport: "成都天府国际机场",
       arrivalAirport: "吉隆坡国际机场", departureTerminal: "T1", arrivalTerminal: "T1",
       checkedBaggage: "TBD", connectionGroup: "separate", isThroughTicket: false,
@@ -81,6 +82,7 @@ window.TRIP_DATA = {
     },
     {
       id: "flight-kl-bali", airline: "TBD", flightNumber: "OD306", date: "2026-07-22",
+      departureCode: "KUL", arrivalCode: "DPS",
       departureTime: "09:00", arrivalTime: "12:00", departureAirport: "吉隆坡国际机场",
       arrivalAirport: "巴厘岛伍拉·赖国际机场（DPS）", departureTerminal: "TBD", arrivalTerminal: "TBD",
       checkedBaggage: "TBD", connectionGroup: "separate", isThroughTicket: false,
@@ -89,6 +91,7 @@ window.TRIP_DATA = {
     },
     {
       id: "flight-bali-kl", airline: "TBD", flightNumber: "OD307", date: "2026-07-25",
+      departureCode: "DPS", arrivalCode: "KUL",
       departureTime: "13:00", arrivalTime: "16:00", departureAirport: "巴厘岛伍拉·赖国际机场（DPS）",
       arrivalAirport: "吉隆坡国际机场", departureTerminal: "TBD", arrivalTerminal: "TBD",
       checkedBaggage: "TBD", connectionGroup: "return-separate", isThroughTicket: false,
@@ -97,6 +100,7 @@ window.TRIP_DATA = {
     },
     {
       id: "flight-3u3994", airline: "四川航空", flightNumber: "3U3994", date: "2026-07-26",
+      departureCode: "KUL", arrivalCode: "TFU",
       departureTime: "00:20", arrivalTime: "04:50", departureAirport: "吉隆坡国际机场",
       arrivalAirport: "成都天府国际机场", departureTerminal: "TBD", arrivalTerminal: "TBD",
       checkedBaggage: "TBD", connectionGroup: "return-separate", isThroughTicket: false,
@@ -190,18 +194,18 @@ window.TRIP_DATA = {
       maps: [{ label: "吉隆坡机场", query: "Kuala Lumpur International Airport" }, { label: "巴厘岛机场", query: "I Gusti Ngurah Rai International Airport" }]
     },
     {
-      id: "day-4", date: "2026-07-23", city: "水明漾/北库塔 → 乌布 → Hilton Bali Resort", theme: "水明漾 → 乌布 → Hilton Bali Resort",
-      keywords: ["乌布山谷", "情侣散步", "酒店休息"],
-      image: "assets/images/ubud.webp", imageAlt: "乌布梯田与自然景观占位图",
-      transport: "北库塔Airbnb → 乌布 → Hilton Bali Resort（建议包车，具体车辆TBD）", status: "pending", confirmed: false, weather: "等待人工录入",
+      id: "day-4", date: "2026-07-23", city: "巴厘岛", theme: "佩妮达岛西线 + 浮潜",
+      keywords: ["佩妮达岛西线", "Kelingking Beach", "Broken Beach", "Angel's Billabong", "浮潜"],
+      image: "assets/images/nusa-penida.webp", imageAlt: "努沙佩尼达海景占位图",
+      transport: "酒店接送 → 码头 → 佩妮达岛西线 → 返回巴厘岛", status: "confirmed", confirmed: true, weather: "等待人工录入",
       periods: {
-        morning: ["办理北库塔Airbnb退房", "包车前往乌布", "游览Campuhan Ridge Walk，体验森林、山谷和情侣散步"],
-        noon: ["在乌布中心午餐"],
-        afternoon: ["二选一：Tegallalang Rice Terrace梯田拍照，或乌布咖啡馆休息", "16:00左右前往Hilton Bali Resort", "入住园景双床房"],
-        evening: ["酒店休息"]
+        morning: ["佩妮达岛西线出海", "Kelingking Beach"],
+        noon: ["Broken Beach", "Angel's Billabong"],
+        afternoon: ["浮潜", "返回巴厘岛", "前往Hilton Bali Resort"],
+        evening: ["入住Hilton Bali Resort并休息"]
       },
-      notes: ["包车车型、司机、出发时间和费用等待确认。", "从北库塔别墅换住Hilton Bali Resort，出发前确认车辆可容纳全部行李。"],
-      maps: [{ label: "Campuhan Ridge Walk", query: "Campuhan Ridge Walk Ubud" }, { label: "Tegallalang梯田", query: "Tegallalang Rice Terrace Bali" }, { label: "Hilton Bali Resort", query: "Hilton Bali Resort" }]
+      notes: ["Nusa Penida West Tour + Snorkeling 已确认。", "集合时间、码头与接送车辆以供应商通知为准。"],
+      maps: [{ label: "Kelingking Beach", query: "Kelingking Beach Nusa Penida" }, { label: "Broken Beach", query: "Broken Beach Nusa Penida" }, { label: "Hilton Bali Resort", query: "Hilton Bali Resort" }]
     },
     {
       id: "day-5", date: "2026-07-24", city: "Hilton Bali Resort → 乌鲁瓦图", theme: "南部海岸 + 乌鲁瓦图日落",
@@ -461,6 +465,7 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-22T00:05:00+08:00", version: "1.5.7", change: "Made Command Center public-first with automatic flight binding and private write gates" },
     { at: "2026-07-21T23:18:15+08:00", version: "1.5.6", change: "Added cached Flight Watcher proxy, estimates, countdown and departure advice" },
     { at: "2026-07-21T23:04:38+08:00", version: "1.5.5", change: "Added Travel Day Mode countdown, trip timeline, quick expenses and activity templates" },
     { at: "2026-07-21T22:51:33+08:00", version: "1.5.4", change: "Added realtime travel status, priority actions and Budget Center first-screen ledger" },

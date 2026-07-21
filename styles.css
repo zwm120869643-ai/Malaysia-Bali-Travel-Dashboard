@@ -138,6 +138,7 @@ main {
 .command-sync-chip.saving { background: #fff0cb; color: #805e0b; }
 .command-sync-chip.conflict { background: #f9dcd8; color: #8a332a; }
 .command-sync-chip.offline { background: #e4e7e7; color: #4b5b5d; }
+.command-sync-chip.public { background: #e7f0f6; color: #315d74; }
 .command-header .command-sync-chip { border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.14); color: white; }
 .command-next-action { min-width: 0; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: center; }
 .command-next-action > div { min-width: 0; }
@@ -149,8 +150,11 @@ main {
 .command-countdown { margin: 9px 0 0; color: var(--muted); font-size: 11px; }
 .command-countdown strong { color: var(--teal); }
 .flight-watcher-card { min-width: 0; display: grid; gap: 14px; }
-.flight-watcher-form { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; align-items: end; }
-.flight-watcher-form .button { grid-column: 1 / -1; }
+.flight-watch-title { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.flight-watch-title span, .flight-watch-title strong, .flight-watch-title small { display: block; overflow-wrap: anywhere; }
+.flight-watch-title strong { margin: 2px 0; font-family: Georgia, serif; color: var(--teal); font-size: 28px; }
+.flight-watch-title span, .flight-watch-title small { color: var(--muted); font-size: 10px; }
+.flight-smart-status { flex: 0 0 auto; padding: 7px 10px; border-radius: 999px; background: var(--teal-soft); color: var(--teal) !important; font-weight: 800; }
 .flight-watch-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .flight-watch-grid > div { min-width: 0; padding: 11px; border-radius: 12px; background: var(--teal-soft); }
 .flight-watch-grid span, .flight-watch-grid strong, .flight-watch-grid small { display: block; overflow-wrap: anywhere; }
@@ -159,6 +163,11 @@ main {
 .flight-watch-advice, .flight-watch-error { margin: 0; font-size: 12px; }
 .flight-watch-advice strong { margin-right: 8px; color: var(--gold); }
 .flight-watch-error { color: var(--danger); }
+.flight-smart-list { min-width: 0; display: grid; gap: 6px; }
+.flight-smart-row { min-width: 0; display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px 10px; border-radius: 11px; background: rgba(13,92,99,.05); }
+.flight-smart-row.current { background: var(--teal-soft); box-shadow: inset 3px 0 var(--teal); }
+.flight-smart-row span, .flight-smart-row strong, .flight-smart-row small { min-width: 0; overflow-wrap: anywhere; font-size: 10px; }
+.flight-smart-row small { color: var(--muted); }
 .command-timeline { min-width: 0; padding-block: 8px; }
 .command-timeline-row { min-width: 0; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
 .command-timeline-row:last-child { border-bottom: 0; }
@@ -465,9 +474,7 @@ main {
   .hero { min-height: 535px; }
   .hero-content { padding: 42px; }
   .command-header { padding: 36px; }
-  .command-travel-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .flight-watcher-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
-  .flight-watcher-form .button { grid-column: auto; }
+  .command-travel-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .flight-watch-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .command-expense-snapshot, .command-quick-actions, .command-sync-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .home-grid { grid-template-columns: 1.05fr .95fr; }
@@ -490,6 +497,8 @@ main {
   .command-next-time { min-height: 78px; padding: 7px; }
   .command-next-time strong { font-size: 17px; }
   .command-timeline-row { grid-template-columns: 74px minmax(0, 1fr); gap: 9px; }
+  .flight-smart-row { grid-template-columns: 70px minmax(0, 1fr); }
+  .flight-smart-row small { grid-column: 2; }
   .document-summary { grid-template-columns: repeat(2, 1fr); }
   .document-row { grid-template-columns: 1fr; }
   .document-row-actions { justify-content: flex-start; }
