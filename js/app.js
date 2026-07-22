@@ -170,6 +170,7 @@
   const preparationEngine = window.TravelPreparationEngine;
   const locationContextService = window.TravelLocationContext;
   const briefingEngine = window.TravelBriefingEngine;
+  const intelligenceLayer = window.TravelIntelligence;
   let state = storage.get();
   let weatherByLocation = {};
   let weatherLoading = true;
@@ -705,9 +706,11 @@
     const nextHotel = travelContext.accommodation.next;
     const activityRisk = travelContext.activityRisk;
     const focusWeather = weatherByLocation[weatherLocationIdForDay(focusDay)] || null;
-    const preparation = preparationEngine.generate(travelContext, focusWeather);
-    const locationAdvice = locationContextService.generate(travelContext, timeline, focusWeather);
+    const activityWeather = focusWeather?.forecast?.find((item) => item.date === nextActivity?.date) || focusWeather;
+    const preparation = preparationEngine.generate(travelContext, activityWeather);
+    const locationAdvice = locationContextService.generate(travelContext, timeline, activityWeather);
     const briefing = briefingEngine.generate(travelContext, dayNumber, preparation, locationAdvice);
+    const travelIntelligence = intelligenceLayer.evaluate({ context: travelContext, timeline, memory, weather: activityWeather, location: locationAdvice, preparation, expenses: privateMode ? sharedSnapshot.expenses : [] });
     const defaultExpenseCurrency = /巴厘|Bali|DPS/i.test(currentLocation) ? "IDR" : /吉隆坡|Kuala Lumpur|KUL/i.test(currentLocation) ? "MYR" : "CNY";
     const flightPlanLabel = flightStatus === "Landed" ? `已抵达${travelContext.flight?.arrivalCode === "DPS" ? "巴厘岛" : travelContext.nextDestination}` : `${travelContext.flight?.flightNumber || "今日无航班"} · ${flightStatus}`;
 
@@ -747,6 +750,14 @@
         <div class="assistant-context">${briefing.advice.map((item) => `<span>${esc(item)}</span>`).join("")}<span>Checklist · ${esc(travelContext.checklist.completed)}/${esc(travelContext.checklist.total)}</span></div>
       </article>
 
+      <div class="section-head"><div><p class="eyebrow">Travel Intelligence Layer</p><h2>主动旅行建议</h2></div><p>${esc(travelIntelligence.health.score)}分</p></div>
+      <div class="intelligence-grid">
+        <article class="card intelligence-card ${esc(travelIntelligence.weather.level)}"><span>Weather Intelligence</span><strong>${esc(travelIntelligence.weather.label)}</strong><p>${esc(travelIntelligence.weather.reason)}</p><small>${esc(travelIntelligence.weather.advice)}</small></article>
+        <article class="card intelligence-card recommendation-card"><span>Recommendation</span><strong>${esc(travelIntelligence.recommendation.title)}</strong><p>${esc(travelIntelligence.recommendation.reason)}</p><small>${esc(travelIntelligence.recommendation.action)}</small></article>
+        <article class="card intelligence-card health-card"><span>Travel Health Score</span><strong>${esc(travelIntelligence.health.score)} · ${esc(travelIntelligence.health.label)}</strong><p>${esc(travelIntelligence.health.reasons.join(" · "))}</p><small>建议：${esc(travelIntelligence.health.advice.join("；"))}</small></article>
+      </div>
+      ${privateMode ? `<article class="card expense-insight"><div><span>Expense Insight</span><strong>${esc(travelIntelligence.expenses.summary)}</strong><small>${travelIntelligence.expenses.topCategory ? `高频分类 · ${esc(EXPENSE_CATEGORIES[travelIntelligence.expenses.topCategory] || travelIntelligence.expenses.topCategory)}` : "等待更多费用记录"}</small></div><div>${travelIntelligence.expenses.byCurrency.length ? travelIntelligence.expenses.byCurrency.map((item) => `<p><strong>${esc(L.formatExpenseAmount(item.today, item.currency))}</strong><small>昨日 ${esc(L.formatExpenseAmount(item.previous, item.currency))} · ${esc(item.direction === "up" ? "上升" : item.direction === "down" ? "下降" : "持平")}</small></p>`).join("") : '<p class="empty">暂无消费趋势</p>'}</div></article>` : ""}
+
       <div class="section-head"><div><p class="eyebrow">Flight Smart Binding</p><h2>✈ 下一航班</h2></div><p>${currentFlightWatch ? `${currentFlightWatch.cached ? "页面缓存" : "实时状态"} · 5分钟` : "行程自动绑定"}</p></div>
       <article class="card flight-watcher-card">
         <div class="flight-watch-title"><div><span>${esc(travelContext.flight?.date || "")}</span><strong>${esc(travelContext.flight?.flightNumber || "暂无后续航班")}</strong><small>${travelContext.flight ? `${esc(travelContext.flight.departureCode)} → ${esc(travelContext.flight.arrivalCode)}` : "旅行航班已完成"}</small></div><span class="flight-smart-status">${esc(flightStatus)}</span></div>
@@ -772,7 +783,9 @@
       <div class="section-head"><div><p class="eyebrow">Trip Timeline</p><h2>旅行时间轴</h2></div><p>${timeline.length}项</p></div>
       <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${item.dynamic ? "next" : ""}"><time>${esc(item.dateLabel)}<br>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(item.classification)}${item.dynamic ? ` · ${esc(flightStatus)} 动态时间` : ""}</small></div></div>`).join("") : '<p class="empty">暂无后续活动</p>'}</div>
 
-      ${memory.length ? `<div class="section-head"><div><p class="eyebrow">Travel Memory</p><h2>旅行事件日志</h2></div><p>${memory.length}项</p></div><div class="card travel-memory">${memory.map((item) => `<div><time>${esc(item.dateLabel)}</time><strong>✓ ${esc(item.title)}</strong></div>`).join("")}</div>` : ""}
+      <div class="section-head"><div><p class="eyebrow">Travel Memory 2.0</p><h2>每日旅行总结</h2></div><p>${esc(travelIntelligence.memory.title)}</p></div>
+      <article class="card memory-summary"><strong>${esc(travelIntelligence.memory.summary)}</strong><div>${travelIntelligence.memory.highlights.map((item) => `<span>${esc(item)}</span>`).join("")}</div></article>
+      ${memory.length ? `<div class="card travel-memory">${memory.map((item) => `<div><time>${esc(item.dateLabel)}</time><strong>✓ ${esc(item.title)}</strong></div>`).join("")}</div>` : ""}
 
       ${privateMode ? `<div class="section-head"><div><p class="eyebrow">Expense Snapshot</p><h2>今日费用</h2></div><p>${todayExpenses.length}笔 · 不换汇</p></div>
       <div class="command-expense-snapshot">${EXPENSE_CURRENCIES.map((currency) => {
@@ -1885,7 +1898,7 @@
   }
 
   function init() {
-    if (!DATA || !L || !travelContextService || !timelineEngine || !preparationEngine || !locationContextService || !briefingEngine) throw new Error("旅行数据或 Travel Assistant 未加载");
+    if (!DATA || !L || !travelContextService || !timelineEngine || !preparationEngine || !locationContextService || !briefingEngine || !intelligenceLayer) throw new Error("旅行数据或 Travel Intelligence 未加载");
     checklistSync.subscribe(updateSyncStatus);
     renderAll();
     document.addEventListener("click", handleClick);

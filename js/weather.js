@@ -30,6 +30,7 @@
           rainProbability: data.daily?.precipitation_probability_max?.[dayIndex] ?? "TBD",
           sunset: data.daily?.sunset?.[dayIndex] || "TBD",
           seaCondition: location.sea_condition?.status || "TBD",
+          forecast: (data.daily?.time || []).map((date, index) => ({ date, rainProbability: data.daily?.precipitation_probability_max?.[index] ?? "TBD", sunset: data.daily?.sunset?.[index] || "TBD", seaCondition: location.sea_condition?.status || "TBD" })),
           updatedAt: data.current.time
         };
       } catch (_) {

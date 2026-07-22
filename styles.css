@@ -178,6 +178,21 @@ main {
 .briefing-list > div { min-width: 0; display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-top: 1px solid rgba(13,92,99,.12); }
 .briefing-list span, .briefing-list strong { overflow-wrap: anywhere; font-size: 11px; }
 .briefing-list span { color: var(--muted); }
+.intelligence-grid { min-width: 0; display: grid; gap: 10px; }
+.intelligence-card { min-width: 0; display: grid; gap: 6px; }
+.intelligence-card > span, .expense-insight span { color: var(--gold); font-size: 10px; font-weight: 800; }
+.intelligence-card strong, .intelligence-card p, .intelligence-card small { overflow-wrap: anywhere; }
+.intelligence-card strong { color: var(--teal); font-size: 18px; }
+.intelligence-card p, .intelligence-card small { margin: 0; font-size: 11px; line-height: 1.55; }
+.intelligence-card small { color: var(--muted); }
+.intelligence-card.yellow { background: #fff8e9; }
+.intelligence-card.red { background: #fff0ed; }
+.expense-insight { min-width: 0; display: grid; gap: 12px; margin-top: 10px; }
+.expense-insight > div { min-width: 0; }
+.expense-insight span, .expense-insight > div > strong, .expense-insight > div > small { display: block; overflow-wrap: anywhere; }
+.expense-insight p { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 7px 0 0; }
+.expense-insight p strong, .expense-insight p small { overflow-wrap: anywhere; font-size: 11px; }
+.expense-insight p small { color: var(--muted); }
 .preparation-card { gap: 10px; }
 .preparation-card h3, .preparation-card p { margin: 0; }
 .preparation-items { min-width: 0; display: flex; flex-wrap: wrap; gap: 7px; }
@@ -243,6 +258,10 @@ main {
 .travel-memory > div:last-child { border-bottom: 0; }
 .travel-memory time { color: var(--gold); font-size: 11px; font-weight: 800; }
 .travel-memory strong { overflow-wrap: anywhere; font-size: 12px; }
+.memory-summary { min-width: 0; display: grid; gap: 10px; background: linear-gradient(135deg, var(--teal-soft), #fff); }
+.memory-summary > strong { overflow-wrap: anywhere; font-size: 15px; }
+.memory-summary > div { min-width: 0; display: flex; flex-wrap: wrap; gap: 7px; }
+.memory-summary span { max-width: 100%; padding: 6px 9px; overflow-wrap: anywhere; border-radius: 999px; background: white; font-size: 10px; }
 .command-expense-snapshot { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .command-expense-currency { min-width: 0; padding: 14px; }
 .command-expense-currency span, .command-expense-currency strong, .command-expense-currency small { display: block; }
@@ -545,6 +564,8 @@ main {
   .today-status-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .flight-watch-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .assistant-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .intelligence-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .expense-insight { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
   .command-expense-snapshot, .command-quick-actions, .command-sync-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .home-grid { grid-template-columns: 1.05fr .95fr; }
   .home-grid .route-card { grid-column: 1 / -1; }

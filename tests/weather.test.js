@@ -26,7 +26,7 @@ const location = {
       async json() {
         return {
           current: { time: "2026-07-20T10:00", temperature_2m: 28.4 },
-          daily: { time: ["2026-07-20"], precipitation_probability_max: [65], sunset: ["2026-07-20T18:18"] }
+          daily: { time: ["2026-07-20", "2026-07-21"], precipitation_probability_max: [65, 20], sunset: ["2026-07-20T18:18", "2026-07-21T18:18"] }
         };
       }
     };
@@ -36,6 +36,7 @@ const location = {
   assert.equal(weather.rainProbability, 65, "降雨概率解析错误");
   assert.equal(weather.sunset, "2026-07-20T18:18", "日落时间解析错误");
   assert.equal(weather.seaCondition, "TBD", "海况预留字段错误");
+  assert.deepEqual(JSON.parse(JSON.stringify(weather.forecast[1])), { date: "2026-07-21", rainProbability: 20, sunset: "2026-07-21T18:18", seaCondition: "TBD" }, "七天天气未提供给智能层");
 
   const offline = context.window.TravelWeather.create(async () => { throw new Error("offline"); });
   assert.equal(await offline.get(location), null, "天气失败时未安全降级");
