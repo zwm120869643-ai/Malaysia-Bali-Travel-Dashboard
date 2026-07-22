@@ -41,7 +41,7 @@
       const minutes = Math.ceil((intelligence.departureAt - now) / 60000);
       return { type: "航班", title: minutes <= 180 ? "前往机场" : "确认机场交通", reason: "航班即将起飞", at: intelligence.departureAt, timeLabel: intelligence.departureTime, location: flight.departureAirport };
     }
-    if (flightSoon && intelligence?.arrivalAt && now <= intelligence.arrivalAt) return { type: "航班", title: "关注航班抵达时间", reason: "正在前往下一目的地", at: intelligence.arrivalAt, timeLabel: intelligence.arrivalTime, location: flight.arrivalAirport };
+    if (flightSoon && intelligence?.status !== "Landed" && intelligence?.arrivalAt && now <= intelligence.arrivalAt) return { type: "航班", title: "关注航班抵达时间", reason: "正在前往下一目的地", at: intelligence.arrivalAt, timeLabel: intelligence.arrivalTime, location: flight.arrivalAirport };
     if (context.accommodation.checkInAt && now < context.accommodation.checkInAt) return { type: "住宿", title: "前往住宿", reason: context.accommodation.advice, at: context.accommodation.checkInAt, timeLabel: context.accommodation.estimatedTime, location: context.accommodation.next?.address || context.nextDestination };
     if (context.nextActivity?.collectionAt && context.nextActivity.collectionAt - now <= 86400000) return { type: "活动", title: "准备装备", reason: "明日出海", at: context.nextActivity.collectionAt, timeLabel: context.nextActivity.collectionTime, location: context.nextActivity.city };
     const next = events.find((item) => item.at === null || item.at >= now);
@@ -50,5 +50,15 @@
     return { type: "旅行状态", title: "确认今日安排", reason: "当前没有更紧急的事件", at: null, timeLabel: "现在", location: context.location };
   }
 
-  root.TravelTimelineEngine = { build, nextAction };
+  function memory(context, logic, limit) {
+    const events = [];
+    const intelligence = context.flight?.intelligence;
+    if (intelligence?.status === "Landed") events.push({ date: context.flight.date, type: "flight", title: `${context.flight.flightNumber} ${context.flight.departureCode}→${context.flight.arrivalCode}`, status: "completed" });
+    if (context.accommodation.current) events.push({ date: context.accommodation.current.checkIn, type: "hotel", title: `${context.accommodation.current.nameZh} 入住`, status: "completed" });
+    context.itinerary.filter((day) => day.date < context.date && ["confirmed", "changed"].includes(day.status) && !/(航班|住宿|酒店|Airbnb|民宿)/i.test(day.theme)).forEach((day) => events.push({ date: day.date, type: "activity", title: day.theme, status: "completed" }));
+    context.expenses.filter((expense) => expense.incurredOn <= context.date).forEach((expense) => events.push({ date: expense.incurredOn, type: "expense", title: expense.title, status: "completed" }));
+    return events.sort((a, b) => b.date.localeCompare(a.date)).slice(0, limit || 8).map((event) => ({ ...event, dateLabel: logic.formatDate(event.date, { month: "numeric", day: "numeric" }) }));
+  }
+
+  root.TravelTimelineEngine = { build, nextAction, memory };
 })(typeof window !== "undefined" ? window : globalThis);

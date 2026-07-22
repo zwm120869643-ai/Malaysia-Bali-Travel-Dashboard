@@ -18,6 +18,7 @@
   };
   const EXPENSE_CATEGORIES = { flight: "机票", hotel: "酒店", transport: "交通", food: "餐饮", sea: "出海", attractions: "景点", insurance: "保险", connectivity: "通信", shopping: "购物", other: "其他" };
   const QUICK_EXPENSE_CATEGORIES = ["flight", "hotel", "transport", "food", "sea", "attractions", "other"];
+  const HOME_EXPENSE_CATEGORIES = ["transport", "food", "hotel", "attractions", "shopping"];
   const EXPENSE_STATUSES = { paid: "已支付", pending: "待支付", refunded: "已退款" };
   const EXPENSE_SPLITS = { shared: "共同费用", personal: "个人费用" };
   const EXPENSE_CURRENCIES = ["CNY", "MYR", "IDR", "USD"];
@@ -166,6 +167,9 @@
     : { configured: false, clear() {}, async query() { throw new Error("航班查询服务未加载"); } };
   const travelContextService = window.TravelContext;
   const timelineEngine = window.TravelTimelineEngine;
+  const preparationEngine = window.TravelPreparationEngine;
+  const locationContextService = window.TravelLocationContext;
+  const briefingEngine = window.TravelBriefingEngine;
   let state = storage.get();
   let weatherByLocation = {};
   let weatherLoading = true;
@@ -678,6 +682,7 @@
     const focusDay = travelContext.day;
     const dayNumber = Math.max(1, itinerary.findIndex((day) => day.id === focusDay.id) + 1);
     const timeline = timelineEngine.build(travelContext, L, 8);
+    const memory = timelineEngine.memory(travelContext, L, 8);
     const nextAction = timelineEngine.nextAction(travelContext, timeline, L);
     const currentFlightWatch = flightWatch?.flightNumber === travelContext.flight?.flightNumber && flightWatch?.date === travelContext.flight?.date ? flightWatch : null;
     const intelligence = travelContext.flight?.intelligence || L.flightIntelligence(null, null);
@@ -699,7 +704,12 @@
     const currentHotel = travelContext.accommodation.current;
     const nextHotel = travelContext.accommodation.next;
     const activityRisk = travelContext.activityRisk;
-    const assistant = L.travelAssistantCore({ day: focusDay, flight: travelContext.flight, flightWatch: currentFlightWatch, hotel: currentHotel, nextHotel, nextActivity, nextAction, location: currentLocation, now });
+    const focusWeather = weatherByLocation[weatherLocationIdForDay(focusDay)] || null;
+    const preparation = preparationEngine.generate(travelContext, focusWeather);
+    const locationAdvice = locationContextService.generate(travelContext, timeline, focusWeather);
+    const briefing = briefingEngine.generate(travelContext, dayNumber, preparation, locationAdvice);
+    const defaultExpenseCurrency = /巴厘|Bali|DPS/i.test(currentLocation) ? "IDR" : /吉隆坡|Kuala Lumpur|KUL/i.test(currentLocation) ? "MYR" : "CNY";
+    const flightPlanLabel = flightStatus === "Landed" ? `已抵达${travelContext.flight?.arrivalCode === "DPS" ? "巴厘岛" : travelContext.nextDestination}` : `${travelContext.flight?.flightNumber || "今日无航班"} · ${flightStatus}`;
 
     $("#view-home").innerHTML = `<div class="command-center">
       <header class="command-header">
@@ -714,16 +724,27 @@
         </div>
       </header>
 
+      <div class="section-head"><div><p class="eyebrow">Today's Plan</p><h2>今天怎么走</h2></div><p>${esc(travelContext.mode)}</p></div>
+      <article class="card today-plan-card">
+        <div class="today-plan-mode"><span>当前模式</span><strong>${esc(travelContext.mode)}</strong></div>
+        <div class="today-plan-grid"><div><span>今天</span><strong>✈ ${esc(flightPlanLabel)}</strong><small>🏠 ${esc(currentHotel ? `已入住 ${currentHotel.nameZh}` : `入住 ${nextHotel?.nameZh || "住宿"}`)}</small><small>🌙 ${esc(locationAdvice.today[0])}</small></div><div><span>明天</span><strong>🌊 ${esc(preparation?.activity.title || nextActivity?.theme || "等待安排")}</strong><small>${esc(preparation?.activity.collectionTime ? `${preparation.activity.collectionTime} 集合` : "时间待确认")}</small></div></div>
+        <div class="today-plan-progress"><span>准备状态</span><strong>${esc(travelContext.checklist.percent)}%</strong><div><i style="width:${esc(travelContext.checklist.percent)}%"></i></div></div>
+      </article>
+
+      ${travelContext.arrival.active ? `<div class="section-head"><div><p class="eyebrow">Arrival Assistant</p><h2>${esc(travelContext.arrival.title)}</h2></div><p>预计${esc(travelContext.arrival.estimatedAccommodationTime)}到达住宿</p></div>
+      <article class="card arrival-assistant"><ol>${travelContext.arrival.steps.map((step) => `<li>${esc(step)}</li>`).join("")}</ol><p>机场手续约60分钟，前往住宿约${esc(travelContext.arrival.transferMinutes)}分钟。</p></article>` : ""}
+
       <div class="section-head"><div><p class="eyebrow">Travel Brain</p><h2>今日状态</h2></div><p>航班 × 行程 × 风险</p></div>
       <article class="card today-status-card">
         <div class="today-status-grid"><div><span>✈ 航班</span><strong>${esc(travelContext.flight?.flightNumber || "暂无航班")}</strong><small>${esc(flightStatus)} · 预计${esc(intelligence.arrivalTime || "TBD")}抵达</small></div><div><span>🏠 住宿</span><strong>${esc(nextHotel?.nameZh || currentHotel?.nameZh || "待确认")}</strong><small>${esc(travelContext.accommodation.status)} · ${esc(travelContext.accommodation.estimatedTime || "TBD")}</small></div><div><span>🌊 活动</span><strong>${esc(nextActivity?.theme || "等待安排")}</strong><small>${esc(nextActivity?.collectionTime ? `明日${nextActivity.collectionTime}` : "时间待确认")} · ${esc(activityRisk.label)}</small></div><div><span>⚠ 当前建议</span><strong>${esc(nextAction.title)}</strong><small>${esc(nextAction.reason)}</small></div></div>
-        <div class="today-quick-expense"><span>快速记账</span>${QUICK_EXPENSE_CATEGORIES.map((category) => `<button class="button small" type="button" data-command-expense="${category}" ${writesDisabled ? "disabled" : ""}>${esc(EXPENSE_CATEGORIES[category])}</button>`).join("")}</div>
+        ${privateMode ? `<form id="quick-expense-form" class="today-quick-expense" data-client-ref=""><strong>快速记账</strong><label>金额<input name="amount" inputmode="decimal" pattern="[0-9]{1,10}([.][0-9]{1,2})?" placeholder="0.00" required></label><label>币种<select name="currency">${EXPENSE_CURRENCIES.map((currency) => `<option ${currency === defaultExpenseCurrency ? "selected" : ""}>${currency}</option>`).join("")}</select></label><label>分类<select name="category">${HOME_EXPENSE_CATEGORIES.map((category) => `<option value="${category}">${esc(category === "attractions" ? "活动" : EXPENSE_CATEGORIES[category])}</option>`).join("")}</select></label><button class="button small primary" type="submit" ${writesDisabled ? "disabled" : ""}>保存</button></form>` : `<div class="today-quick-expense"><span>快速记账</span>${HOME_EXPENSE_CATEGORIES.map((category) => `<button class="button small" type="button" data-command-expense="${category}">${esc(category === "attractions" ? "活动" : EXPENSE_CATEGORIES[category])}</button>`).join("")}</div>`}
       </article>
 
       <div class="section-head"><div><p class="eyebrow">Daily Briefing</p><h2>每日旅行简报</h2></div><p>行程情境融合</p></div>
       <article class="card assistant-briefing-card">
-        <p class="eyebrow">Travel Assistant Core</p><h3>${esc(assistant.title)}</h3><p>${esc(assistant.summary)}</p>
-        <div class="assistant-context">${assistant.context.map((item) => `<span>${esc(item)}</span>`).join("")}<span>Checklist · ${esc(travelContext.checklist.completed)}/${esc(travelContext.checklist.total)}</span></div>
+        <p class="eyebrow">Travel Assistant Experience</p><h3>${esc(briefing.title)}</h3>
+        <div class="briefing-list">${briefing.today.map((item) => `<div><span>${esc(item.icon)} ${esc(item.label)}</span><strong>${esc(item.text)}</strong></div>`).join("")}${briefing.tomorrow ? `<div><span>${esc(briefing.tomorrow.icon)} ${esc(briefing.tomorrow.label)}</span><strong>${esc(briefing.tomorrow.text)}</strong></div>` : ""}</div>
+        <div class="assistant-context">${briefing.advice.map((item) => `<span>${esc(item)}</span>`).join("")}<span>Checklist · ${esc(travelContext.checklist.completed)}/${esc(travelContext.checklist.total)}</span></div>
       </article>
 
       <div class="section-head"><div><p class="eyebrow">Flight Smart Binding</p><h2>✈ 下一航班</h2></div><p>${currentFlightWatch ? `${currentFlightWatch.cached ? "页面缓存" : "实时状态"} · 5分钟` : "行程自动绑定"}</p></div>
@@ -744,12 +765,14 @@
       </article>
 
       <div class="assistant-grid">
-        <article class="card assistant-list"><div><p class="eyebrow">Prepare Now</p><h2>现在准备</h2></div>${assistant.preparations.map((item) => `<div class="assistant-list-row"><strong>${esc(item.title)}</strong><small>${esc(item.detail)}</small></div>`).join("")}</article>
-        <article class="card assistant-list"><div><p class="eyebrow">Local Tips</p><h2>在地建议</h2></div>${assistant.tips.map((item) => `<div class="assistant-list-row"><strong>${esc(item.title)}</strong><small>${esc(item.detail)}</small></div>`).join("")}</article>
+        ${preparation ? `<article class="card assistant-list preparation-card"><div><p class="eyebrow">🌊 明日活动</p><h2>${esc(preparation.activity.title)}</h2><small>集合 · ${esc(preparation.activity.collectionTime)}</small></div><h3>今晚准备</h3><div class="preparation-items">${preparation.preparation.map((item) => `<span>✓ ${esc(item)}</span>`).join("")}</div><p><strong>建议</strong> · ${esc(preparation.reminders.join("；"))}</p><small>${esc(preparation.risk.title)} · ${esc(preparation.risk.detail)}</small></article>` : ""}
+        <article class="card assistant-list location-card"><div><p class="eyebrow">Location Context</p><h2>当前位置附近</h2></div>${locationAdvice.nearby.map((item) => `<div class="assistant-list-row"><strong>${esc(item.type)}</strong><small>${esc(item.suggestion)}</small></div>`).join("")}<p><strong>今天建议</strong> · ${esc(locationAdvice.today.join(" / "))}</p></article>
       </div>
 
       <div class="section-head"><div><p class="eyebrow">Trip Timeline</p><h2>旅行时间轴</h2></div><p>${timeline.length}项</p></div>
       <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${item.dynamic ? "next" : ""}"><time>${esc(item.dateLabel)}<br>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(item.classification)}${item.dynamic ? ` · ${esc(flightStatus)} 动态时间` : ""}</small></div></div>`).join("") : '<p class="empty">暂无后续活动</p>'}</div>
+
+      ${memory.length ? `<div class="section-head"><div><p class="eyebrow">Travel Memory</p><h2>旅行事件日志</h2></div><p>${memory.length}项</p></div><div class="card travel-memory">${memory.map((item) => `<div><time>${esc(item.dateLabel)}</time><strong>✓ ${esc(item.title)}</strong></div>`).join("")}</div>` : ""}
 
       ${privateMode ? `<div class="section-head"><div><p class="eyebrow">Expense Snapshot</p><h2>今日费用</h2></div><p>${todayExpenses.length}笔 · 不换汇</p></div>
       <div class="command-expense-snapshot">${EXPENSE_CURRENCIES.map((currency) => {
@@ -1259,6 +1282,31 @@
     return `expense-${token}`;
   }
 
+  async function saveQuickExpense(form) {
+    if (!documentService.authenticated || !sharedSnapshot) return showToast("登录后才能新增共享费用");
+    if (navigator.onLine === false || expenseSaving) return showToast("当前无法保存费用");
+    const fields = new FormData(form);
+    const amountMinor = L.parseExpenseAmount(String(fields.get("amount") || "").trim());
+    const category = String(fields.get("category") || "");
+    const currency = String(fields.get("currency") || "");
+    if (amountMinor === null) return showToast("金额需大于 0，且最多保留两位小数");
+    if (!HOME_EXPENSE_CATEGORIES.includes(category) || !EXPENSE_CURRENCIES.includes(currency)) return showToast("费用分类或币种无效");
+    form.dataset.clientRef ||= expenseClientRef();
+    expenseSaving = true;
+    form.querySelector("button[type=submit]").disabled = true;
+    try {
+      await sharedDataService.createExpense({ clientRef: form.dataset.clientRef, title: EXPENSE_CATEGORIES[category], category, amountMinor, currency, incurredOn: L.dateKey(new Date()), paidByUserId: sharedSnapshot.currentUserId, splitMode: "shared", paymentStatus: "paid", note: null });
+      await loadSharedSnapshot(true);
+      showToast("费用已记录");
+    } catch (error) {
+      if (["AUTH_REQUIRED", "SESSION_EXPIRED"].includes(error?.code)) await resetPrivateSession("登录已失效，请重新登录");
+      else showToast(error?.message || "共享费用保存失败");
+    } finally {
+      expenseSaving = false;
+      renderHome();
+    }
+  }
+
   function startExpenseCreate(category) {
     if (!documentService.authenticated) return showToast("登录后才能新增共享费用");
     if (!sharedSnapshot) return showToast("共享费用正在加载");
@@ -1564,6 +1612,7 @@
   }
 
   function handleInput(event) {
+    if (event.target.form?.id === "quick-expense-form") event.target.form.dataset.clientRef = "";
     if (expenseEdit && event.target.form?.id === "expense-ledger-form" && Object.prototype.hasOwnProperty.call(expenseEdit.value, event.target.name)) {
       expenseEdit.value = { ...expenseEdit.value, [event.target.name]: event.target.value };
       return;
@@ -1586,6 +1635,10 @@
   }
 
   async function handleSubmit(event) {
+    if (event.target.id === "quick-expense-form") {
+      event.preventDefault();
+      return saveQuickExpense(event.target);
+    }
     if (event.target.id === "expense-ledger-form") {
       event.preventDefault();
       return saveExpenseEdit(event.target);
@@ -1832,7 +1885,7 @@
   }
 
   function init() {
-    if (!DATA || !L || !travelContextService || !timelineEngine) throw new Error("旅行数据或 Travel Brain 未加载");
+    if (!DATA || !L || !travelContextService || !timelineEngine || !preparationEngine || !locationContextService || !briefingEngine) throw new Error("旅行数据或 Travel Assistant 未加载");
     checklistSync.subscribe(updateSyncStatus);
     renderAll();
     document.addEventListener("click", handleClick);

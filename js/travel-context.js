@@ -13,6 +13,14 @@
     return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
   }
 
+  function hotelTransferMinutes(hotel) {
+    const location = `${hotel?.nameZh || ""} ${hotel?.address || ""}`;
+    if (/Hilton|努沙杜瓦/i.test(location)) return 35;
+    if (/乌鲁瓦图|Uluwatu/i.test(location)) return 50;
+    if (/北库塔|水明漾|Kuta Utara|Seminyak/i.test(location)) return 50;
+    return 45;
+  }
+
   function create(input) {
     const data = input.data;
     const logic = input.logic;
@@ -64,12 +72,23 @@
     const arrivalAt = intelligence.arrivalAt;
     let mode = "Activity Mode";
     const flightSoon = flight && logic.daysBetween(date, flight.date) <= 1;
-    if (flightSoon && departureAt && now.getTime() < departureAt) mode = "Departure Mode";
+    if (intelligence.status === "Landed" && !currentAccommodation) mode = "Arrival Mode";
+    else if (flightSoon && departureAt && now.getTime() < departureAt) mode = "Departure Mode";
     else if (flightSoon && departureAt && arrivalAt && now.getTime() <= arrivalAt) mode = "Transit Mode";
     else if (arrivalAt && checkInAt && now.getTime() < checkInAt) mode = "Arrival Mode";
 
     const routeParts = String(focusDay?.city || "当前地点").split(/\s*(?:→|->)\s*/);
-    const location = flightSoon && departureAt && now.getTime() < departureAt ? routeParts[0] : flightSoon && departureAt && arrivalAt && now.getTime() <= arrivalAt ? `${flight.departureCode} → ${flight.arrivalCode}` : routeParts.at(-1);
+    const location = intelligence.status === "Landed" ? routeParts.at(-1) : flightSoon && departureAt && now.getTime() < departureAt ? routeParts[0] : flightSoon && departureAt && arrivalAt && now.getTime() <= arrivalAt ? `${flight.departureCode} → ${flight.arrivalCode}` : routeParts.at(-1);
+    const arrivalTransferMinutes = hotelTransferMinutes(nextAccommodation);
+    const estimatedAccommodationAt = arrivalAt ? arrivalAt + (60 + arrivalTransferMinutes) * 60000 : null;
+    const arrival = {
+      active: intelligence.status === "Landed" && mode === "Arrival Mode",
+      title: `欢迎来到${flight?.arrivalCode === "DPS" ? "巴厘岛" : routeParts.at(-1)}`,
+      steps: ["完成入境", "领取行李", "前往住宿", "办理入住"],
+      transferMinutes: arrivalTransferMinutes,
+      estimatedAccommodationAt,
+      estimatedAccommodationTime: estimatedAccommodationAt ? clock(estimatedAccommodationAt) : null
+    };
     const risks = [activityRisk];
     if (["medium", "high", "critical"].includes(intelligence.impactLevel)) risks.unshift({ type: "flight", level: intelligence.impactLevel, label: intelligence.impactLabel, title: "航班延误影响", detail: intelligence.detail });
 
@@ -81,6 +100,7 @@
       phase: trip.phase,
       phaseLabel: trip.label,
       mode,
+      arrival,
       day: focusDay,
       itinerary,
       flight: flight ? { ...flight, intelligence } : null,

@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.6.2",
-    versionName: "Travel Brain Core",
-    versionLabel: "统一旅行状态核心版",
-    lastUpdated: "2026-07-22T09:23:52+08:00",
+    version: "1.6.3",
+    versionName: "Travel Assistant Experience",
+    versionLabel: "旅行执行助手体验版",
+    lastUpdated: "2026-07-22T09:57:57+08:00",
     weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -465,6 +465,7 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-22T09:57:57+08:00", version: "1.6.3", change: "Added preparation, arrival, location, daily briefing, quick expense and travel memory experiences" },
     { at: "2026-07-22T09:23:52+08:00", version: "1.6.2", change: "Unified flight, accommodation, activity, checklist, timeline and next-action context" },
     { at: "2026-07-22T08:38:03+08:00", version: "1.6.1", change: "Added flight intelligence, delay impact, dynamic timeline, activity risk and quick expense categories" },
     { at: "2026-07-22T08:24:14+08:00", version: "1.6.0", change: "Added daily briefings, contextual next actions, preparation prompts and local tips" },

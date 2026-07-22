@@ -141,18 +141,48 @@ main {
 .command-sync-chip.public { background: #e7f0f6; color: #315d74; }
 .command-header .command-sync-chip { border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.14); color: white; }
 .today-status-card { min-width: 0; display: grid; gap: 14px; }
+.today-plan-card { min-width: 0; display: grid; gap: 12px; }
+.today-plan-mode, .today-plan-grid, .today-plan-progress { min-width: 0; }
+.today-plan-mode span, .today-plan-mode strong, .today-plan-grid span, .today-plan-grid strong, .today-plan-grid small { display: block; overflow-wrap: anywhere; }
+.today-plan-mode span, .today-plan-grid span, .today-plan-grid small, .today-plan-progress span { color: var(--muted); font-size: 10px; }
+.today-plan-mode strong { margin-top: 3px; color: var(--teal); font-size: 20px; }
+.today-plan-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.today-plan-grid > div { min-width: 0; padding: 11px; border-radius: 12px; background: rgba(13,92,99,.06); }
+.today-plan-grid strong { margin: 4px 0; font-size: 13px; }
+.today-plan-progress { display: grid; grid-template-columns: auto auto minmax(80px, 1fr); gap: 9px; align-items: center; }
+.today-plan-progress strong { color: var(--teal); }
+.today-plan-progress div { height: 7px; overflow: hidden; border-radius: 999px; background: var(--line); }
+.today-plan-progress i { display: block; height: 100%; border-radius: inherit; background: var(--teal); }
+.arrival-assistant { min-width: 0; display: grid; gap: 10px; background: linear-gradient(135deg, var(--teal-soft), #fff); }
+.arrival-assistant ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style-position: inside; }
+.arrival-assistant li { min-width: 0; padding: 10px; overflow-wrap: anywhere; border-radius: 11px; background: white; font-size: 12px; }
+.arrival-assistant p { margin: 0; color: var(--muted); font-size: 11px; }
 .today-status-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .today-status-grid > div { min-width: 0; padding: 11px; border-radius: 12px; background: rgba(13,92,99,.06); }
 .today-status-grid span, .today-status-grid strong, .today-status-grid small { display: block; overflow-wrap: anywhere; }
 .today-status-grid span, .today-status-grid small { color: var(--muted); font-size: 9px; }
 .today-status-grid strong { margin: 3px 0; color: var(--teal); font-size: 13px; }
-.today-quick-expense { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.today-quick-expense { min-width: 0; display: flex; flex-wrap: wrap; align-items: end; gap: 7px; }
 .today-quick-expense > span { margin-right: 3px; color: var(--gold); font-size: 10px; font-weight: 800; }
+.today-quick-expense > strong { align-self: center; color: var(--gold); font-size: 11px; }
+.today-quick-expense label { min-width: 0; display: grid; gap: 3px; color: var(--muted); font-size: 9px; }
+.today-quick-expense input, .today-quick-expense select { min-width: 0; width: 100%; height: 34px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 9px; background: white; color: var(--ink); }
+.today-quick-expense label:first-of-type { flex: 1 1 110px; }
+.today-quick-expense label:not(:first-of-type) { flex: 0 1 92px; }
 .assistant-briefing-card { min-width: 0; display: grid; gap: 10px; overflow: hidden; background: linear-gradient(135deg, var(--teal-soft), #fff8ef); }
 .assistant-briefing-card h3 { overflow-wrap: anywhere; font-family: Georgia, "Songti SC", serif; font-size: 24px; }
 .assistant-briefing-card > p:last-of-type { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.75; }
 .assistant-context { min-width: 0; display: flex; flex-wrap: wrap; gap: 7px; }
 .assistant-context span { max-width: 100%; padding: 6px 9px; overflow-wrap: anywhere; border-radius: 999px; background: rgba(255,255,255,.76); color: var(--teal); font-size: 10px; font-weight: 800; }
+.briefing-list { min-width: 0; display: grid; gap: 7px; }
+.briefing-list > div { min-width: 0; display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-top: 1px solid rgba(13,92,99,.12); }
+.briefing-list span, .briefing-list strong { overflow-wrap: anywhere; font-size: 11px; }
+.briefing-list span { color: var(--muted); }
+.preparation-card { gap: 10px; }
+.preparation-card h3, .preparation-card p { margin: 0; }
+.preparation-items { min-width: 0; display: flex; flex-wrap: wrap; gap: 7px; }
+.preparation-items span { max-width: 100%; padding: 7px 9px; overflow-wrap: anywhere; border-radius: 999px; background: var(--teal-soft); font-size: 11px; }
+.location-card > p { margin: 10px 0 0; font-size: 11px; }
 .assistant-next-advice { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: #fff8e9; font-size: 12px; line-height: 1.6; }
 .assistant-next-advice strong { margin-right: 7px; color: var(--gold); }
 .assistant-grid { min-width: 0; display: grid; gap: 10px; margin-top: 18px; }
@@ -208,6 +238,11 @@ main {
 .command-timeline-row strong, .command-timeline-row small { display: block; overflow-wrap: anywhere; }
 .command-timeline-row strong { font-size: 13px; }
 .command-timeline-row small { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.travel-memory { min-width: 0; display: grid; gap: 0; }
+.travel-memory > div { min-width: 0; display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.travel-memory > div:last-child { border-bottom: 0; }
+.travel-memory time { color: var(--gold); font-size: 11px; font-weight: 800; }
+.travel-memory strong { overflow-wrap: anywhere; font-size: 12px; }
 .command-expense-snapshot { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .command-expense-currency { min-width: 0; padding: 14px; }
 .command-expense-currency span, .command-expense-currency strong, .command-expense-currency small { display: block; }
@@ -533,6 +568,9 @@ main {
   .command-timeline-row { grid-template-columns: 74px minmax(0, 1fr); gap: 9px; }
   .flight-smart-row { grid-template-columns: 70px minmax(0, 1fr); }
   .flight-smart-row small { grid-column: 2; }
+  .today-quick-expense { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+  .today-quick-expense > strong, .today-quick-expense > span { grid-column: 1 / -1; }
+  .today-quick-expense label:first-of-type, .today-quick-expense label:not(:first-of-type) { min-width: 0; }
   .document-summary { grid-template-columns: repeat(2, 1fr); }
   .document-row { grid-template-columns: 1fr; }
   .document-row-actions { justify-content: flex-start; }
