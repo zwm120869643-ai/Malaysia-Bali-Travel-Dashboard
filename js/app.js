@@ -709,6 +709,8 @@
     const nextActivity = itinerary.find((day) => day.date >= focusDay.date && !/(航班|返程|住宿|酒店|交通|Airbnb|民宿)/i.test(day.theme));
     const nextTransport = live.flight ? `${live.flight.flightNumber} · ${live.flight.departureCode} → ${live.flight.arrivalCode}` : focusDay.transport;
     const currentLocation = live.hotel ? live.hotel.nameZh.includes("吉隆坡") ? "吉隆坡" : "巴厘岛" : focusDay.city;
+    const nextHotel = DATA.hotels.map((hotel) => ({ ...hotel, ...state.hotels[hotel.id] })).filter((hotel) => hotel.status !== "cancelled" && hotel.checkIn >= focusDay.date).sort((a, b) => a.checkIn.localeCompare(b.checkIn))[0] || null;
+    const assistant = L.travelAssistantCore({ day: focusDay, flight: live.flight, flightWatch: currentFlightWatch, hotel: live.hotel, nextHotel, nextActivity, nextAction, location: currentLocation, now });
 
     $("#view-home").innerHTML = `<div class="command-center">
       <header class="command-header">
@@ -723,6 +725,12 @@
         </div>
       </header>
 
+      <div class="section-head"><div><p class="eyebrow">Daily Briefing</p><h2>每日旅行简报</h2></div><p>行程情境融合</p></div>
+      <article class="card assistant-briefing-card">
+        <p class="eyebrow">Travel Assistant Core</p><h3>${esc(assistant.title)}</h3><p>${esc(assistant.summary)}</p>
+        <div class="assistant-context">${assistant.context.map((item) => `<span>${esc(item)}</span>`).join("")}</div>
+      </article>
+
       <div class="section-head"><div><p class="eyebrow">Flight Smart Binding</p><h2>✈ 下一航班</h2></div><p>${currentFlightWatch ? `${currentFlightWatch.cached ? "页面缓存" : "实时状态"} · 5分钟` : "行程自动绑定"}</p></div>
       <article class="card flight-watcher-card">
         <div class="flight-watch-title"><div><span>${esc(live.flight?.date || "")}</span><strong>${esc(live.flight?.flightNumber || "暂无后续航班")}</strong><small>${live.flight ? `${esc(live.flight.departureCode)} → ${esc(live.flight.arrivalCode)}` : "旅行航班已完成"}</small></div><span class="flight-smart-status">${esc(flightStatus)}</span></div>
@@ -735,8 +743,13 @@
       <div class="section-head"><div><p class="eyebrow">Next Action</p><h2>下一步</h2></div><p>${esc(focusDay.city)}</p></div>
       <article class="card command-next-action">
         <div class="command-next-time"><span>时间</span><strong>${esc(nextAction?.timeLabel || "待定")}</strong></div>
-        <div><p class="eyebrow">${esc(nextAction?.type || "下一事件")}</p><h3>${esc(nextAction?.title || "今日已无后续安排")}</h3><p class="command-location">地点 · ${esc(nextAction?.location || focusDay.city)}</p><p class="command-countdown">下一事件倒计时 · <strong id="next-action-countdown" data-next-at="${esc(nextAction?.at ?? "")}">${esc(L.travelCountdown(nextAction?.at))}</strong></p><div class="card-actions"><button class="button small primary" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}>快速记账</button></div></div>
+        <div><p class="eyebrow">${esc(nextAction?.type || "下一事件")}</p><h3>${esc(nextAction?.title || "今日已无后续安排")}</h3><p class="command-location">地点 · ${esc(nextAction?.location || focusDay.city)}</p><p class="command-countdown">下一事件倒计时 · <strong id="next-action-countdown" data-next-at="${esc(nextAction?.at ?? "")}">${esc(L.travelCountdown(nextAction?.at))}</strong></p><p class="assistant-next-advice"><strong>智能建议</strong>${esc(assistant.nextAdvice)}</p><div class="card-actions"><button class="button small primary" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}>快速记账</button></div></div>
       </article>
+
+      <div class="assistant-grid">
+        <article class="card assistant-list"><div><p class="eyebrow">Prepare Now</p><h2>现在准备</h2></div>${assistant.preparations.map((item) => `<div class="assistant-list-row"><strong>${esc(item.title)}</strong><small>${esc(item.detail)}</small></div>`).join("")}</article>
+        <article class="card assistant-list"><div><p class="eyebrow">Local Tips</p><h2>在地建议</h2></div>${assistant.tips.map((item) => `<div class="assistant-list-row"><strong>${esc(item.title)}</strong><small>${esc(item.detail)}</small></div>`).join("")}</article>
+      </div>
 
       <div class="section-head"><div><p class="eyebrow">Trip Timeline</p><h2>旅行时间轴</h2></div><p>${timeline.length}项</p></div>
       <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${nextAction?.type === "行程" && item.id === nextAction.id ? "next" : ""}"><time>${esc(item.dateLabel)}<br>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(commandPeriodLabel(item.period))}</small></div></div>`).join("") : '<p class="empty">暂无后续活动</p>'}</div>

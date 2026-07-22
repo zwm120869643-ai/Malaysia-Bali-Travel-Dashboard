@@ -140,6 +140,19 @@ main {
 .command-sync-chip.offline { background: #e4e7e7; color: #4b5b5d; }
 .command-sync-chip.public { background: #e7f0f6; color: #315d74; }
 .command-header .command-sync-chip { border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.14); color: white; }
+.assistant-briefing-card { min-width: 0; display: grid; gap: 10px; overflow: hidden; background: linear-gradient(135deg, var(--teal-soft), #fff8ef); }
+.assistant-briefing-card h3 { overflow-wrap: anywhere; font-family: Georgia, "Songti SC", serif; font-size: 24px; }
+.assistant-briefing-card > p:last-of-type { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.75; }
+.assistant-context { min-width: 0; display: flex; flex-wrap: wrap; gap: 7px; }
+.assistant-context span { max-width: 100%; padding: 6px 9px; overflow-wrap: anywhere; border-radius: 999px; background: rgba(255,255,255,.76); color: var(--teal); font-size: 10px; font-weight: 800; }
+.assistant-next-advice { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: #fff8e9; font-size: 12px; line-height: 1.6; }
+.assistant-next-advice strong { margin-right: 7px; color: var(--gold); }
+.assistant-grid { min-width: 0; display: grid; gap: 10px; margin-top: 18px; }
+.assistant-list { min-width: 0; display: grid; gap: 0; }
+.assistant-list-row { min-width: 0; padding: 11px 0; border-top: 1px solid var(--line); }
+.assistant-list-row strong, .assistant-list-row small { display: block; overflow-wrap: anywhere; }
+.assistant-list-row strong { font-size: 13px; }
+.assistant-list-row small { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .command-next-action { min-width: 0; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: center; }
 .command-next-action > div { min-width: 0; }
 .command-next-action h3 { overflow-wrap: anywhere; font-family: Georgia, "Songti SC", serif; font-size: 22px; }
@@ -476,6 +489,7 @@ main {
   .command-header { padding: 36px; }
   .command-travel-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .flight-watch-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .assistant-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .command-expense-snapshot, .command-quick-actions, .command-sync-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .home-grid { grid-template-columns: 1.05fr .95fr; }
   .home-grid .route-card { grid-column: 1 / -1; }

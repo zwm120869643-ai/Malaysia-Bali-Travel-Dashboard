@@ -313,6 +313,81 @@
     return minutes <= 180 ? "距离起飞不足3小时，建议立即前往机场" : "建议预计起飞前3小时抵达机场";
   }
 
+  function travelAssistantCore(context) {
+    const source = context || {};
+    const reference = source.now || new Date();
+    const hour = reference.getHours();
+    const dayPart = hour < 11 ? "早上" : hour < 18 ? "下午" : "晚上";
+    const day = source.day || {};
+    const flight = source.flight || null;
+    const hotel = source.hotel || null;
+    const nextHotel = source.nextHotel || null;
+    const activity = source.nextActivity || null;
+    const action = source.nextAction || null;
+    const location = source.location || day.city || "当前目的地";
+    const activityText = `${activity?.theme || ""} ${JSON.stringify(activity?.periods || {})}`;
+    const flightStatus = flightStatusLabel(source.flightWatch, flight);
+    const contextItems = [
+      hotel ? `住宿 · ${hotel.nameZh || hotel.name}` : null,
+      !hotel && nextHotel ? `下一住宿 · ${nextHotel.nameZh || nextHotel.name}` : null,
+      flight ? `航班 · ${flight.flightNumber} ${flight.departureCode || ""} → ${flight.arrivalCode || ""}`.trim() : null,
+      activity ? `活动 · ${activity.theme}` : null
+    ].filter(Boolean);
+    const summaryParts = [`${dayPart}好，当前在${location}`];
+    if (hotel) summaryParts.push(`住宿为${hotel.nameZh || hotel.name}`);
+    else if (nextHotel) summaryParts.push(`抵达后入住${nextHotel.nameZh || nextHotel.name}`);
+    if (flight) summaryParts.push(`下一航段 ${flight.flightNumber} 为 ${flightStatus}`);
+    if (activity) summaryParts.push(`后续安排是${activity.theme}`);
+
+    let nextAdvice = "先查看旅行时间轴，确认下一项的时间和地点";
+    if (action?.type === "航班") {
+      if (flightStatus === "Cancelled") nextAdvice = "航班已取消，先联系航空公司确认替代航班和后续住宿";
+      else if (flightStatus === "Delayed") nextAdvice = "航班延误，仍按原计划前往机场，并持续关注柜台通知";
+      else {
+        const minutes = Number.isFinite(action.at) ? Math.ceil((action.at - reference.getTime()) / 60000) : null;
+        nextAdvice = minutes !== null && minutes <= 180
+          ? "优先确认航站楼、登机资料和前往机场路线，建议现在出发"
+          : "按起飞前3小时抵达机场倒推交通时间，并提前确认航站楼";
+      }
+    } else if (action?.type === "退房") nextAdvice = "先收齐随身物品和充电设备，再确认退房与下一段交通";
+    else if (action?.type === "入住") nextAdvice = "先确认酒店地址、入住时间和押金方式，再安排前往路线";
+    else if (action?.type === "交通") nextAdvice = "先确认上车点，并为路况和找车预留缓冲时间";
+    else if (action?.type === "已付款活动") nextAdvice = "活动已付款，优先确认集合点、开始时间和天气条件";
+    else if (action?.title) nextAdvice = `下一项是${action.title}，出发前确认地点与所需物品`;
+
+    const preparations = [];
+    if (flight) {
+      preparations.push({ title: "证件与登机", detail: "确认护照、登机资料、航站楼和托运行李额" });
+      preparations.push({ title: "机场交通", detail: "按起飞前3小时抵达机场倒推，给路况和安检留出缓冲" });
+    }
+    if (hotel && hotel.checkOut === day.date) preparations.push({ title: "退房检查", detail: "收齐证件、充电设备和随身物品，确认行李去向" });
+    if (!hotel && nextHotel?.checkIn === day.date) preparations.push({ title: "入住准备", detail: "保存酒店地址，确认入住时间、交通和押金方式" });
+    if (/(出海|浮潜|snorkel|sea|penida|佩妮达)/i.test(activityText)) preparations.push({ title: "出海装备", detail: "准备防晒、泳装、防水袋、饮水和晕船药，并确认海况" });
+    else if (activity) preparations.push({ title: "活动确认", detail: "确认集合时间、地图位置、天气和合适穿着" });
+    if (!preparations.length) preparations.push({ title: "轻装出发", detail: "带好手机、电量、饮水，并再次确认下一站地图" });
+
+    const tips = [];
+    if (/(吉隆坡|kuala lumpur|\bkl\b)/i.test(location)) {
+      tips.push(hour < 10
+        ? { title: "吉隆坡早高峰", detail: "机场方向可能拥堵，Grab 叫车和进航站楼都要留缓冲" }
+        : { title: "吉隆坡天气", detail: "午后常有短时阵雨，步行安排保留室内备选" });
+    } else if (/(巴厘|bali|denpasar|dps)/i.test(location)) {
+      tips.push(hour < 16
+        ? { title: "巴厘岛白天", detail: "注意防晒和补水，跨区域移动为路况预留时间" }
+        : { title: "巴厘岛傍晚", detail: "日落前后道路更拥堵，返程或晚餐不要排得太紧" });
+    } else tips.push({ title: "在地节奏", detail: "根据天气和路况微调安排，避免把相邻事件排得太紧" });
+    if (/(出海|浮潜|snorkel|sea|penida|佩妮达)/i.test(activityText)) tips.push({ title: "海上活动", detail: "以前一晚确认集合点和海况为准，风浪大时接受调整或取消" });
+
+    return {
+      title: `${location} · ${dayPart}简报`,
+      summary: `${summaryParts.join("；")}。`,
+      context: contextItems,
+      nextAdvice,
+      preparations: preparations.slice(0, 4),
+      tips: tips.slice(0, 2)
+    };
+  }
+
   function travelTimeline(itinerary, now, limit) {
     const reference = now || new Date();
     const today = dateKey(reference);
@@ -375,5 +450,5 @@
     return Boolean(role && (expense?.createdBy === currentUserId || role === "owner"));
   }
 
-  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, activeFlights, nextActiveFlight, flightStatusLabel, nextTravelAction, travelCountdown, flightWatchTarget, flightDepartureAdvice, travelTimeline, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
+  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, activeFlights, nextActiveFlight, flightStatusLabel, nextTravelAction, travelCountdown, flightWatchTarget, flightDepartureAdvice, travelAssistantCore, travelTimeline, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
 })(typeof window !== "undefined" ? window : globalThis);
