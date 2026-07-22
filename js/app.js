@@ -164,6 +164,8 @@
   const flightWatcherService = window.TravelFlightWatcher
     ? window.TravelFlightWatcher.create(window.TRAVEL_SYNC_CONFIG, documentService)
     : { configured: false, clear() {}, async query() { throw new Error("航班查询服务未加载"); } };
+  const travelContextService = window.TravelContext;
+  const timelineEngine = window.TravelTimelineEngine;
   let state = storage.get();
   let weatherByLocation = {};
   let weatherLoading = true;
@@ -624,27 +626,10 @@
     return ITINERARY_PERIODS.find(([name]) => name === period)?.[1] || period;
   }
 
-  function liveTravelState(day, now, itinerary, watch) {
-    const reference = now || new Date();
-    const today = L.dateKey(reference);
-    const time = `${String(reference.getHours()).padStart(2, "0")}:${String(reference.getMinutes()).padStart(2, "0")}`;
+  function travelContextFor(itinerary, now, watch) {
     const flights = DATA.flights.map((flight) => ({ ...flight, ...state.flights[flight.id] }));
     const hotels = DATA.hotels.map((hotel) => ({ ...hotel, ...state.hotels[hotel.id] }));
-    const flight = L.itineraryBoundFlight(itinerary || [day], flights, reference);
-    const matchingWatch = watch?.flightNumber === flight?.flightNumber && watch?.date === flight?.date ? watch : null;
-    const intelligence = L.flightIntelligence(flight, matchingWatch);
-    return {
-      flights: L.activeFlights(flights, now),
-      flight,
-      flightIntelligence: intelligence,
-      hotel: hotels.filter((hotel) => {
-        if (hotel.status === "cancelled" || hotel.checkIn > day.date || hotel.checkOut < day.date) return false;
-        if (day.date !== today) return true;
-        const checkout = String(hotel.notes || "").match(/(?:退房[^。；]*?(\d{2}:\d{2})|(\d{2}:\d{2})\s*退房)/)?.slice(1).find(Boolean) || "11:00";
-        return !(hotel.checkIn === today && time < "15:00") && !(hotel.checkOut === today && time >= checkout);
-      }).sort((a, b) => b.checkIn.localeCompare(a.checkIn))[0] || null,
-      nextAction: L.nextTravelAction(day, flights, hotels, now, sharedSnapshot?.expenses || [], intelligence)
-    };
+    return travelContextService.create({ data: DATA, logic: L, itinerary, flights, hotels, flightWatch: watch, now, expenses: sharedSnapshot?.expenses || [], checklistItems: allChecklistItems(), completedTasks: state.completedTasks });
   }
 
   function loadFlightWatch() {
@@ -653,7 +638,7 @@
     const itinerary = itineraryDays();
     const current = L.currentItinerary(itinerary);
     const focusDay = current || itinerary[0];
-    const active = liveTravelState(focusDay, undefined, itinerary).flight;
+    const active = travelContextFor(itinerary).flight;
     const query = active ? { flightNumber: active.flightNumber, date: active.date } : null;
     if (!query) return Promise.resolve(null);
     const runVersion = ++flightWatchRequestVersion;
@@ -689,20 +674,17 @@
   function renderCommandCenter() {
     const itinerary = itineraryDays();
     const now = new Date();
-    const trip = L.tripMoment(DATA.meta);
-    const current = L.currentItinerary(itinerary);
-    const focusDay = current || (trip.phase === "upcoming" ? itinerary[0] : itinerary.at(-1));
+    const travelContext = travelContextFor(itinerary, now, flightWatch);
+    const focusDay = travelContext.day;
     const dayNumber = Math.max(1, itinerary.findIndex((day) => day.id === focusDay.id) + 1);
-    const live = liveTravelState(focusDay, now, itinerary, flightWatch);
-    const nextAction = live.nextAction;
-    const currentFlightWatch = flightWatch?.flightNumber === live.flight?.flightNumber && flightWatch?.date === live.flight?.date ? flightWatch : null;
-    const intelligence = live.flightIntelligence;
+    const timeline = timelineEngine.build(travelContext, L, 8);
+    const nextAction = timelineEngine.nextAction(travelContext, timeline, L);
+    const currentFlightWatch = flightWatch?.flightNumber === travelContext.flight?.flightNumber && flightWatch?.date === travelContext.flight?.date ? flightWatch : null;
+    const intelligence = travelContext.flight?.intelligence || L.flightIntelligence(null, null);
     const flightStatus = intelligence.status;
-    const timeline = L.travelTimeline(itinerary, now, 8, intelligence);
-    const watchedTarget = L.flightWatchTarget(currentFlightWatch);
-    const flightTargetAt = watchedTarget ? Date.parse(watchedTarget) : nextAction?.type === "航班" ? nextAction.at : null;
-    const watchedDeparture = currentFlightWatch?.departure || { airport: live.flight?.departureCode, estimatedTime: live.flight?.departureTime };
-    const watchedArrival = currentFlightWatch?.arrival || { airport: live.flight?.arrivalCode, estimatedTime: live.flight?.arrivalTime };
+    const flightTargetAt = flightStatus === "Departed" ? intelligence.arrivalAt : intelligence.departureAt;
+    const watchedDeparture = { airport: currentFlightWatch?.departure?.airport || travelContext.flight?.departureCode, estimatedTime: intelligence.departureTime };
+    const watchedArrival = { airport: currentFlightWatch?.arrival?.airport || travelContext.flight?.arrivalCode, estimatedTime: intelligence.arrivalTime };
     const privateMode = documentService.authenticated && Boolean(sharedSnapshot);
     const todayExpenses = privateMode ? sharedSnapshot.expenses.filter((expense) => expense.incurredOn === focusDay.date) : [];
     const expenseTotals = L.expenseLedgerTotals(todayExpenses);
@@ -710,53 +692,55 @@
     const documents = privateMode ? documentCounts() : { total: 0 };
     const sync = commandSyncState();
     const writesDisabled = documentService.authenticated && (!privateMode || sync.key === "offline" || sync.key === "saving" || sharedDataLoading);
-    const phaseLabel = trip.phase === "upcoming" ? "即将出发" : trip.phase === "traveling" ? "旅行进行中" : "旅行已结束";
-    const nextActivity = itinerary.find((day) => day.date >= focusDay.date && !/(航班|返程|住宿|酒店|交通|Airbnb|民宿)/i.test(day.theme));
-    const nextTransport = live.flight ? `${live.flight.flightNumber} · ${live.flight.departureCode} → ${live.flight.arrivalCode}` : focusDay.transport;
-    const currentLocation = live.hotel ? live.hotel.nameZh.includes("吉隆坡") ? "吉隆坡" : "巴厘岛" : focusDay.city;
-    const nextHotel = DATA.hotels.map((hotel) => ({ ...hotel, ...state.hotels[hotel.id] })).filter((hotel) => hotel.status !== "cancelled" && hotel.checkIn >= focusDay.date).sort((a, b) => a.checkIn.localeCompare(b.checkIn))[0] || null;
-    const activityRisk = L.activityRisk(nextActivity);
-    const assistant = L.travelAssistantCore({ day: focusDay, flight: live.flight, flightWatch: currentFlightWatch, hotel: live.hotel, nextHotel, nextActivity, nextAction, location: currentLocation, now });
+    const phaseLabel = travelContext.phase === "upcoming" ? "即将出发" : travelContext.phase === "traveling" ? "旅行进行中" : "旅行已结束";
+    const nextActivity = travelContext.nextActivity;
+    const nextTransport = travelContext.flight ? `${travelContext.flight.flightNumber} · ${travelContext.flight.departureCode} → ${travelContext.flight.arrivalCode}` : focusDay.transport;
+    const currentLocation = travelContext.location;
+    const currentHotel = travelContext.accommodation.current;
+    const nextHotel = travelContext.accommodation.next;
+    const activityRisk = travelContext.activityRisk;
+    const assistant = L.travelAssistantCore({ day: focusDay, flight: travelContext.flight, flightWatch: currentFlightWatch, hotel: currentHotel, nextHotel, nextActivity, nextAction, location: currentLocation, now });
 
     $("#view-home").innerHTML = `<div class="command-center">
       <header class="command-header">
         <div class="command-header-top"><span class="command-private-label">Smart Public Travel Command Center</span><span class="command-sync-chip ${sync.key}" role="status" aria-live="polite">${esc(sync.label)}</span></div>
-        <p class="eyebrow">今日模式 · ${esc(L.formatDate(focusDay.date, { month: "numeric", day: "numeric", weekday: "short" }))} · ${esc(phaseLabel)}</p>
+        <p class="eyebrow">${esc(travelContext.mode)} · ${esc(L.formatDate(focusDay.date, { month: "numeric", day: "numeric", weekday: "short" }))} · ${esc(phaseLabel)}</p>
         <h1>${esc(DATA.meta.title)}</h1>
         <div class="command-travel-meta">
           <div><span>当前地点</span><strong>${esc(currentLocation)}</strong><small>Day ${esc(dayNumber)} · ${esc(focusDay.theme)}</small></div>
-          <div><span>当前住宿</span><strong>${esc(live.hotel?.nameZh || "待确认")}</strong><small>${live.hotel ? `${esc(live.hotel.checkIn)} → ${esc(live.hotel.checkOut)}` : esc(focusDay.theme)}</small></div>
-          <div><span>下一交通</span><strong>${esc(nextTransport)}</strong><small>${live.flight ? `${esc(live.flight.date)} ${esc(live.flight.departureTime)}` : esc(focusDay.transport)}</small></div>
-          <div><span>下一活动</span><strong>${esc(nextActivity?.theme || "等待安排")}</strong><small>${esc(nextActivity ? L.formatDate(nextActivity.date, { month: "numeric", day: "numeric", weekday: "short" }) : "暂无后续活动")}</small></div>
+          <div><span>当前住宿</span><strong>${esc(currentHotel?.nameZh || nextHotel?.nameZh || "待确认")}</strong><small>${esc(travelContext.accommodation.status)} · ${esc(travelContext.accommodation.estimatedTime || "TBD")}</small></div>
+          <div><span>下一交通</span><strong>${esc(nextTransport)}</strong><small>${travelContext.flight ? `${esc(travelContext.flight.date)} ${esc(intelligence.departureTime)}` : esc(focusDay.transport)}</small></div>
+          <div><span>下一活动</span><strong>${esc(nextActivity?.theme || "等待安排")}</strong><small>${esc(nextActivity ? `${L.formatDate(nextActivity.date, { month: "numeric", day: "numeric", weekday: "short" })} ${nextActivity.collectionTime || ""}` : "暂无后续活动")}</small></div>
         </div>
       </header>
 
       <div class="section-head"><div><p class="eyebrow">Travel Brain</p><h2>今日状态</h2></div><p>航班 × 行程 × 风险</p></div>
       <article class="card today-status-card">
-        <div class="today-status-grid"><div><span>当前状态</span><strong>${esc(intelligence.todayStatus)}</strong><small>${esc(flightStatus)}</small></div><div><span>延误影响</span><strong>${esc(intelligence.delayLabel)}</strong><small>${esc(intelligence.impactLabel)} · ${esc(intelligence.detail)}</small></div><div><span>下一行动</span><strong>${esc(nextAction?.type || "等待安排")}</strong><small>${esc(nextAction?.title || "今日已完成")}</small></div><div><span>活动风险</span><strong>${esc(activityRisk.label)} · ${esc(activityRisk.title)}</strong><small>${esc(activityRisk.detail)}</small></div></div>
+        <div class="today-status-grid"><div><span>✈ 航班</span><strong>${esc(travelContext.flight?.flightNumber || "暂无航班")}</strong><small>${esc(flightStatus)} · 预计${esc(intelligence.arrivalTime || "TBD")}抵达</small></div><div><span>🏠 住宿</span><strong>${esc(nextHotel?.nameZh || currentHotel?.nameZh || "待确认")}</strong><small>${esc(travelContext.accommodation.status)} · ${esc(travelContext.accommodation.estimatedTime || "TBD")}</small></div><div><span>🌊 活动</span><strong>${esc(nextActivity?.theme || "等待安排")}</strong><small>${esc(nextActivity?.collectionTime ? `明日${nextActivity.collectionTime}` : "时间待确认")} · ${esc(activityRisk.label)}</small></div><div><span>⚠ 当前建议</span><strong>${esc(nextAction.title)}</strong><small>${esc(nextAction.reason)}</small></div></div>
         <div class="today-quick-expense"><span>快速记账</span>${QUICK_EXPENSE_CATEGORIES.map((category) => `<button class="button small" type="button" data-command-expense="${category}" ${writesDisabled ? "disabled" : ""}>${esc(EXPENSE_CATEGORIES[category])}</button>`).join("")}</div>
       </article>
 
       <div class="section-head"><div><p class="eyebrow">Daily Briefing</p><h2>每日旅行简报</h2></div><p>行程情境融合</p></div>
       <article class="card assistant-briefing-card">
         <p class="eyebrow">Travel Assistant Core</p><h3>${esc(assistant.title)}</h3><p>${esc(assistant.summary)}</p>
-        <div class="assistant-context">${assistant.context.map((item) => `<span>${esc(item)}</span>`).join("")}</div>
+        <div class="assistant-context">${assistant.context.map((item) => `<span>${esc(item)}</span>`).join("")}<span>Checklist · ${esc(travelContext.checklist.completed)}/${esc(travelContext.checklist.total)}</span></div>
       </article>
 
       <div class="section-head"><div><p class="eyebrow">Flight Smart Binding</p><h2>✈ 下一航班</h2></div><p>${currentFlightWatch ? `${currentFlightWatch.cached ? "页面缓存" : "实时状态"} · 5分钟` : "行程自动绑定"}</p></div>
       <article class="card flight-watcher-card">
-        <div class="flight-watch-title"><div><span>${esc(live.flight?.date || "")}</span><strong>${esc(live.flight?.flightNumber || "暂无后续航班")}</strong><small>${live.flight ? `${esc(live.flight.departureCode)} → ${esc(live.flight.arrivalCode)}` : "旅行航班已完成"}</small></div><span class="flight-smart-status">${esc(flightStatus)}</span></div>
+        <div class="flight-watch-title"><div><span>${esc(travelContext.flight?.date || "")}</span><strong>${esc(travelContext.flight?.flightNumber || "暂无后续航班")}</strong><small>${travelContext.flight ? `${esc(travelContext.flight.departureCode)} → ${esc(travelContext.flight.arrivalCode)}` : "旅行航班已完成"}</small></div><span class="flight-smart-status">${esc(flightStatus)}</span></div>
         <div class="flight-watch-grid"><div><span>航班状态</span><strong>${esc(flightStatus)}</strong><small>${esc(currentFlightWatch?.statusDetail || (flightWatchError ? "网络查询失败，使用手动状态" : flightWatchLoading ? "正在更新实时状态" : "行程 / Flight Center"))}</small></div><div><span>预计出发</span><strong>${esc(watchedDeparture.estimatedTime || "TBD")}</strong><small>${esc(watchedDeparture.airport || "TBD")}</small></div><div><span>预计抵达</span><strong>${esc(watchedArrival.estimatedTime || "TBD")}</strong><small>${esc(watchedArrival.airport || "TBD")}</small></div><div><span>航班倒计时</span><strong id="flight-watch-countdown" data-next-at="${esc(flightTargetAt ?? "")}">${esc(L.travelCountdown(flightTargetAt))}</strong><small>${esc(currentFlightWatch?.source || "手动状态")}</small></div></div>
+        <div class="flight-time-comparison"><div><span>计划时间</span><strong>${esc(intelligence.scheduledDepartureTime || "TBD")} → ${esc(intelligence.scheduledArrivalTime || "TBD")}</strong></div><div><span>实时调整</span><strong>${esc(intelligence.departureTime || "TBD")} → ${esc(intelligence.arrivalTime || "TBD")}</strong></div></div>
         <div class="flight-intelligence ${esc(intelligence.impactLevel)}"><span>Flight Intelligence · 延误影响</span><strong>${esc(intelligence.delayLabel)} · ${esc(intelligence.impactLabel)}</strong><small>${esc(intelligence.detail)}</small></div>
         <p class="flight-watch-advice"><strong>出发建议</strong>${esc(L.flightDepartureAdvice(currentFlightWatch))}</p>
         ${flightWatchError ? `<p class="flight-watch-error" role="status">${esc(flightWatchError)}</p>` : ""}
-        <div class="flight-smart-list">${live.flights.map((flight, index) => `<div class="flight-smart-row ${index === 0 ? "current" : ""}"><span>${esc(flight.date)}</span><strong>${esc(flight.flightNumber)} · ${esc(flight.departureCode)} → ${esc(flight.arrivalCode)}</strong><small>${esc(index === 0 ? flightStatus : L.flightStatusLabel(null, flight))}</small></div>`).join("")}</div>
+        <div class="flight-smart-list">${travelContext.upcomingFlights.map((flight, index) => `<div class="flight-smart-row ${index === 0 ? "current" : ""}"><span>${esc(flight.date)}</span><strong>${esc(flight.flightNumber)} · ${esc(flight.departureCode)} → ${esc(flight.arrivalCode)}</strong><small>${esc(index === 0 ? flightStatus : L.flightStatusLabel(null, flight))}</small></div>`).join("")}</div>
       </article>
 
       <div class="section-head"><div><p class="eyebrow">Brain Next Action</p><h2>下一步</h2></div><p>${esc(focusDay.city)}</p></div>
       <article class="card command-next-action">
         <div class="command-next-time"><span>时间</span><strong>${esc(nextAction?.timeLabel || "待定")}</strong></div>
-        <div><p class="eyebrow">${esc(nextAction?.type || "下一事件")}</p><h3>${esc(nextAction?.title || "今日已无后续安排")}</h3><p class="command-location">地点 · ${esc(nextAction?.location || focusDay.city)}</p><p class="command-countdown">下一事件倒计时 · <strong id="next-action-countdown" data-next-at="${esc(nextAction?.at ?? "")}">${esc(L.travelCountdown(nextAction?.at))}</strong></p><p class="assistant-next-advice"><strong>智能建议</strong>${esc(assistant.nextAdvice)}</p><div class="card-actions"><button class="button small primary" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}>快速记账</button></div></div>
+        <div><p class="eyebrow">${esc(nextAction.type)}</p><h3>${esc(nextAction.title)}</h3><p class="command-location">地点 · ${esc(nextAction.location)}</p><p class="command-countdown">下一事件倒计时 · <strong id="next-action-countdown" data-next-at="${esc(nextAction.at ?? "")}">${esc(L.travelCountdown(nextAction.at))}</strong></p><p class="assistant-next-advice"><strong>原因</strong>${esc(nextAction.reason)}</p><div class="card-actions"><button class="button small primary" type="button" data-command-expense ${writesDisabled ? "disabled" : ""}>快速记账</button></div></div>
       </article>
 
       <div class="assistant-grid">
@@ -765,7 +749,7 @@
       </div>
 
       <div class="section-head"><div><p class="eyebrow">Trip Timeline</p><h2>旅行时间轴</h2></div><p>${timeline.length}项</p></div>
-      <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${item.dynamic || nextAction?.type === "行程" && item.id === nextAction.id ? "next" : ""}"><time>${esc(item.dateLabel)}<br>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(commandPeriodLabel(item.period))}${item.dynamic ? ` · ${esc(flightStatus)} 动态时间` : ""}</small></div></div>`).join("") : '<p class="empty">暂无后续活动</p>'}</div>
+      <div class="card command-timeline">${timeline.length ? timeline.map((item) => `<div class="command-timeline-row ${item.dynamic ? "next" : ""}"><time>${esc(item.dateLabel)}<br>${esc(item.timeLabel || "待定")}</time><div><strong>${esc(item.text)}</strong><small>${esc(item.classification)}${item.dynamic ? ` · ${esc(flightStatus)} 动态时间` : ""}</small></div></div>`).join("") : '<p class="empty">暂无后续活动</p>'}</div>
 
       ${privateMode ? `<div class="section-head"><div><p class="eyebrow">Expense Snapshot</p><h2>今日费用</h2></div><p>${todayExpenses.length}笔 · 不换汇</p></div>
       <div class="command-expense-snapshot">${EXPENSE_CURRENCIES.map((currency) => {
@@ -916,7 +900,7 @@
     const refreshButton = documentService.authenticated && sharedDataService.configured
       ? `<button class="button" type="button" id="refresh-itinerary" ${sharedDataLoading ? "disabled" : ""}>${sharedDataLoading ? "正在同步" : "刷新共享行程"}</button>`
       : "";
-    const activeFlight = liveTravelState(current || itinerary[0], undefined, itinerary, flightWatch).flight;
+    const activeFlight = travelContextFor(itinerary, undefined, flightWatch).flight;
     $("#view-itinerary").innerHTML = `
       <header class="page-header"><p class="eyebrow">Daily story</p><h1>每日行程</h1><p>慢一点，把时间留给风景和彼此。所有待确认安排都会保留，不会因冲突被自动删除。</p><div class="header-actions"><button class="button" type="button" id="jump-today" ${current ? "" : "disabled"}>跳到今天</button>${editButton}${refreshButton}</div></header>
       ${activeFlight ? `<article class="alert warning"><div><h3>当前有效航班 · ${esc(activeFlight.flightNumber)}</h3><p>${esc(activeFlight.date)} ${esc(activeFlight.departureTime)} ${esc(activeFlight.departureAirport)} → ${esc(activeFlight.arrivalTime)} ${esc(activeFlight.arrivalAirport)} · 状态：${esc(activeFlight.actualStatus)}</p></div></article>` : ""}
@@ -1848,7 +1832,7 @@
   }
 
   function init() {
-    if (!DATA || !L) throw new Error("旅行数据或页面逻辑未加载");
+    if (!DATA || !L || !travelContextService || !timelineEngine) throw new Error("旅行数据或 Travel Brain 未加载");
     checklistSync.subscribe(updateSyncStatus);
     renderAll();
     document.addEventListener("click", handleClick);

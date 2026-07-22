@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "malaysia-bali-dashboard-";
-const CACHE_VERSION = "v1.6.1";
+const CACHE_VERSION = "v1.6.2";
 const CACHE = `${CACHE_PREFIX}${CACHE_VERSION}`;
 const SHELL = [
   "./",
@@ -15,6 +15,8 @@ const SHELL = [
   "./js/documents.js",
   "./js/shared-data.js",
   "./js/flight-watcher.js",
+  "./js/travel-context.js",
+  "./js/timeline-engine.js",
   "./js/app.js",
   "./assets/images/placeholder-cover.svg",
   "./assets/images/placeholder-hotel.svg",

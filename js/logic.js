@@ -264,10 +264,15 @@
     const scheduledDeparture = travelDateTime(flight.date, flight.departureTime)?.getTime() ?? null;
     const scheduledArrival = travelDateTime(flight.date, flight.arrivalTime)?.getTime() ?? null;
     const watchedDeparture = Date.parse(watch?.departure?.estimatedAt || "");
-    const watchedArrival = Date.parse(watch?.arrival?.estimatedAt || "");
     const departureAt = Number.isFinite(watchedDeparture) ? watchedDeparture : travelDateTime(flight.date, watch?.departure?.estimatedTime || flight.departureTime)?.getTime() ?? scheduledDeparture;
-    const arrivalAt = Number.isFinite(watchedArrival) ? watchedArrival : travelDateTime(flight.date, watch?.arrival?.estimatedTime || flight.arrivalTime)?.getTime() ?? scheduledArrival;
-    const delayMinutes = Math.max(0, Math.round(Math.max((departureAt - scheduledDeparture) || 0, (arrivalAt - scheduledArrival) || 0) / 60000));
+    const scheduledDuration = scheduledArrival - scheduledDeparture;
+    const durationMinutes = Math.max(0, Math.round((scheduledDuration < 0 ? scheduledDuration + 86400000 : scheduledDuration) / 60000));
+    const departureTime = watch?.departure?.estimatedTime || flight.departureTime;
+    const [departureHour, departureMinute] = departureTime.split(":").map(Number);
+    const arrivalClockMinutes = departureHour * 60 + departureMinute + durationMinutes;
+    const arrivalTime = `${String(Math.floor(arrivalClockMinutes / 60) % 24).padStart(2, "0")}:${String(arrivalClockMinutes % 60).padStart(2, "0")}`;
+    const arrivalAt = departureAt + durationMinutes * 60000;
+    const delayMinutes = Math.max(0, Math.round(((departureAt - scheduledDeparture) || 0) / 60000));
     let impactLevel = "low";
     let impactLabel = "按计划";
     let detail = "当前预计时间与计划一致";
@@ -288,8 +293,11 @@
       detail,
       departureAt,
       arrivalAt,
-      departureTime: watch?.departure?.estimatedTime || flight.departureTime,
-      arrivalTime: watch?.arrival?.estimatedTime || flight.arrivalTime
+      scheduledDepartureTime: flight.departureTime,
+      scheduledArrivalTime: flight.arrivalTime,
+      durationMinutes,
+      departureTime,
+      arrivalTime
     };
   }
 

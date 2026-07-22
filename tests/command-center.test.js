@@ -105,6 +105,8 @@ const recent = L.recentSharedChanges(
 assert.deepEqual(recent.map((item) => [item.type, item.title]), [["费用", "最新费用"], ["行程", "较早行程"]], "最近修改未按时间排序");
 
 const app = fs.readFileSync("js/app.js", "utf8");
+const travelContextSource = fs.readFileSync("js/travel-context.js", "utf8");
+const timelineSource = fs.readFileSync("js/timeline-engine.js", "utf8");
 const css = fs.readFileSync("styles.css", "utf8");
 const worker = fs.readFileSync("service-worker.js", "utf8");
 const persisted = app.match(/function persistentState\(value\) \{([\s\S]*?)\n  \}/)?.[1] || "";
@@ -113,7 +115,7 @@ assert.match(app, /function renderHome\(\) \{\s*return renderCommandCenter\(\);/
 assert.match(app, /const privateMode = documentService\.authenticated && Boolean\(sharedSnapshot\)/, "私有 Command Center 数据缺少登录边界");
 assert.match(app, /privateMode \? `<div class="section-head"><div><p class="eyebrow">Expense Snapshot/, "公开模式未隔离费用金额");
 assert.match(app, /登录后才能编辑行程|登录后才能记账|登录后才能上传文件/, "公开快捷入口缺少登录写入门禁");
-assert.match(app, /const itinerary = itineraryDays\(\);[\s\S]*L\.travelTimeline\(itinerary, now, 8, intelligence\)/, "首页未读取动态跨日合并行程");
+assert.match(app, /const travelContext = travelContextFor\(itinerary, now, flightWatch\);[\s\S]*timelineEngine\.build\(travelContext, L, 8\)/, "首页未通过统一上下文读取动态跨日行程");
 assert.match(app, /expense\.incurredOn === focusDay\.date/, "首页费用未限定当天");
 assert.match(app, /const documents = privateMode \? documentCounts\(\) : \{ total: 0 \}/, "首页未隔离读取 Document Center 状态");
 assert.match(app, /<h2>最近修改<\/h2>/, "Command Center 缺少最近修改");
@@ -121,18 +123,21 @@ assert.match(app, /<strong>编辑今日行程<\/strong>/, "首页缺少编辑今
 assert.match(app, /Smart Public Travel Command Center/, "Command Center 未升级为公开旅行状态中心");
 assert.match(app, /当前地点|当前住宿|下一交通|下一活动/, "Command Center 缺少旅行状态卡");
 assert.match(app, /flightActualTag\(actual\)/, "航班卡片未突出显示实际状态");
-assert.match(app, /L\.nextTravelAction\(/, "Command Center 未使用优先行动逻辑");
+assert.match(app, /timelineEngine\.nextAction\(travelContext, timeline, L\)/, "Command Center 未使用统一 Next Action 逻辑");
 assert.match(app, /L\.travelAssistantCore\(/, "Command Center 未接入 Travel Assistant Core");
-assert.match(app, /L\.flightIntelligence\(|flightIntelligence: intelligence/, "Command Center 未接入 Flight Intelligence");
-assert.match(app, /L\.activityRisk\(/, "Command Center 未接入活动风险检测");
+assert.match(travelContextSource, /logic\.flightIntelligence\(flight, matchingWatch\)/, "Travel Context 未接入 Flight Intelligence");
+assert.match(travelContextSource, /let activityRisk = \{ type: "activity"/, "Travel Context 未接入活动风险检测");
+assert.match(timelineSource, /classification: fixed \? "Fixed Event" : "Flexible Event"/, "Timeline Engine 未区分固定与弹性事件");
 assert.match(app, /<h2>今日状态<\/h2>/, "Command Center 缺少 Today Status Card");
+assert.match(app, /✈ 航班|🏠 住宿|🌊 活动|⚠ 当前建议/, "Today Status Card 信息不完整");
+assert.match(app, /计划时间[\s\S]*实时调整/, "航班卡缺少计划与实时调整对照");
 assert.match(app, /Flight Intelligence · 延误影响/, "航班卡缺少延误影响");
 assert.match(app, /data-command-expense="\$\{category\}"/, "首页缺少快速记账分类");
 assert.match(app, /startExpenseCreate\(commandExpense\.dataset\.commandExpense\)/, "快速记账分类未传入账本表单");
 assert.match(app, /每日旅行简报|现在准备|在地建议/, "Travel Assistant Core 展示不完整");
-assert.match(app, /assistant\.nextAdvice/, "Next Action 未展示智能建议");
+assert.match(app, /nextAction\.reason/, "Next Action 未展示统一上下文建议");
 assert.doesNotMatch(app, /DATA\.alerts\[1\]/, "行程页仍被固定旧航班提醒覆盖");
-assert.match(app, /今日模式/, "首页缺少 Travel Day Mode");
+assert.match(app, /travelContext\.mode/, "首页缺少 Travel Mode");
 assert.match(app, /id="next-action-countdown"/, "首页缺少下一事件倒计时");
 assert.match(app, /<h2>旅行时间轴<\/h2>/, "首页缺少旅行时间轴视图");
 assert.match(app, /setInterval\(updateTravelCountdown, 30000\)/, "倒计时未定时刷新");

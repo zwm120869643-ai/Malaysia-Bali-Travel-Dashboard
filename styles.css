@@ -181,6 +181,11 @@ main {
 .flight-watch-grid span, .flight-watch-grid strong, .flight-watch-grid small { display: block; overflow-wrap: anywhere; }
 .flight-watch-grid span, .flight-watch-grid small { color: var(--muted); font-size: 9px; }
 .flight-watch-grid strong { margin: 3px 0; color: var(--teal); font-size: 14px; }
+.flight-time-comparison { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.flight-time-comparison > div { min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 12px; }
+.flight-time-comparison span, .flight-time-comparison strong { display: block; overflow-wrap: anywhere; }
+.flight-time-comparison span { color: var(--muted); font-size: 9px; }
+.flight-time-comparison strong { margin-top: 3px; font-size: 13px; }
 .flight-watch-advice, .flight-watch-error { margin: 0; font-size: 12px; }
 .flight-watch-advice strong { margin-right: 8px; color: var(--gold); }
 .flight-watch-error { color: var(--danger); }

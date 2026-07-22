@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.6.1",
-    versionName: "Travel Brain",
-    versionLabel: "旅行智能决策版",
-    lastUpdated: "2026-07-22T08:38:03+08:00",
+    version: "1.6.2",
+    versionName: "Travel Brain Core",
+    versionLabel: "统一旅行状态核心版",
+    lastUpdated: "2026-07-22T09:23:52+08:00",
     weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -187,7 +187,7 @@ window.TRIP_DATA = {
       periods: {
         morning: ["09:00 OD306 Kuala Lumpur → Bali"],
         noon: ["12:00 arrival"],
-        afternoon: ["酒店入住"],
+        afternoon: ["14:00 酒店入住"],
         evening: ["晚餐休息"]
       },
       notes: ["因错过原航班，改乘 OD306 前往巴厘岛。"],
@@ -199,7 +199,7 @@ window.TRIP_DATA = {
       image: "assets/images/nusa-penida.webp", imageAlt: "努沙佩尼达海景占位图",
       transport: "酒店接送 → 码头 → 佩妮达岛西线 → 返回巴厘岛", status: "confirmed", confirmed: true, weather: "等待人工录入",
       periods: {
-        morning: ["佩妮达岛西线出海", "Kelingking Beach"],
+        morning: ["07:00 佩妮达岛西线出海", "Kelingking Beach"],
         noon: ["Broken Beach", "Angel's Billabong"],
         afternoon: ["浮潜", "返回巴厘岛", "前往Hilton Bali Resort"],
         evening: ["入住Hilton Bali Resort并休息"]
@@ -465,6 +465,7 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-22T09:23:52+08:00", version: "1.6.2", change: "Unified flight, accommodation, activity, checklist, timeline and next-action context" },
     { at: "2026-07-22T08:38:03+08:00", version: "1.6.1", change: "Added flight intelligence, delay impact, dynamic timeline, activity risk and quick expense categories" },
     { at: "2026-07-22T08:24:14+08:00", version: "1.6.0", change: "Added daily briefings, contextual next actions, preparation prompts and local tips" },
     { at: "2026-07-22T00:05:00+08:00", version: "1.5.7", change: "Made Command Center public-first with automatic flight binding and private write gates" },

@@ -70,15 +70,16 @@ const service = FlightWatcher.create({
   assert.equal(L.flightDepartureAdvice({ ...response, status: "cancelled" }), "航班已取消，请联系航空公司确认后续安排", "取消航班建议错误");
 
   const app = fs.readFileSync("js/app.js", "utf8");
+  const travelContext = fs.readFileSync("js/travel-context.js", "utf8");
   const index = fs.readFileSync("index.html", "utf8");
   const worker = fs.readFileSync("service-worker.js", "utf8");
   const edge = fs.readFileSync("supabase/functions/flight-watcher/index.ts", "utf8");
   assert.ok(index.indexOf("js/flight-watcher.js") < index.indexOf("js/app.js"), "Flight Watcher 客户端加载顺序错误");
   assert.doesNotMatch(app, /id="flight-watcher-form"/, "Command Center 仍显示手动航班号入口");
   assert.match(app, /const query = active \? \{ flightNumber: active\.flightNumber, date: active\.date \} : null/, "Flight Watcher 未自动绑定当前航班");
-  assert.match(app, /L\.itineraryBoundFlight\(itinerary \|\| \[day\], flights, reference\)/, "Flight Watcher 未优先从行程绑定航班");
-  assert.match(app, /L\.flightIntelligence\(flight, matchingWatch\)/, "网络失败时未回退行程状态");
-  assert.match(app, /live\.flights\.map/, "多航段航班列表缺失");
+  assert.match(travelContext, /logic\.itineraryBoundFlight\(itinerary, flights, now\)/, "Flight Watcher 未优先从行程绑定航班");
+  assert.match(travelContext, /logic\.flightIntelligence\(flight, matchingWatch\)/, "网络失败时未回退行程状态");
+  assert.match(app, /travelContext\.upcomingFlights\.map/, "多航段航班列表缺失");
   assert.match(app, /预计出发|预计抵达/, "Command Center 缺少预计时间");
   assert.match(app, /航班倒计时/, "Command Center 缺少航班倒计时");
   assert.match(app, /出发建议/, "Command Center 缺少出发建议");
