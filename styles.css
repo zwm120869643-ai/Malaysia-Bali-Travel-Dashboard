@@ -140,6 +140,14 @@ main {
 .command-sync-chip.offline { background: #e4e7e7; color: #4b5b5d; }
 .command-sync-chip.public { background: #e7f0f6; color: #315d74; }
 .command-header .command-sync-chip { border: 1px solid rgba(255,255,255,.24); background: rgba(255,255,255,.14); color: white; }
+.today-status-card { min-width: 0; display: grid; gap: 14px; }
+.today-status-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.today-status-grid > div { min-width: 0; padding: 11px; border-radius: 12px; background: rgba(13,92,99,.06); }
+.today-status-grid span, .today-status-grid strong, .today-status-grid small { display: block; overflow-wrap: anywhere; }
+.today-status-grid span, .today-status-grid small { color: var(--muted); font-size: 9px; }
+.today-status-grid strong { margin: 3px 0; color: var(--teal); font-size: 13px; }
+.today-quick-expense { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.today-quick-expense > span { margin-right: 3px; color: var(--gold); font-size: 10px; font-weight: 800; }
 .assistant-briefing-card { min-width: 0; display: grid; gap: 10px; overflow: hidden; background: linear-gradient(135deg, var(--teal-soft), #fff8ef); }
 .assistant-briefing-card h3 { overflow-wrap: anywhere; font-family: Georgia, "Songti SC", serif; font-size: 24px; }
 .assistant-briefing-card > p:last-of-type { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.75; }
@@ -176,6 +184,12 @@ main {
 .flight-watch-advice, .flight-watch-error { margin: 0; font-size: 12px; }
 .flight-watch-advice strong { margin-right: 8px; color: var(--gold); }
 .flight-watch-error { color: var(--danger); }
+.flight-intelligence { min-width: 0; padding: 11px 12px; border-radius: 12px; background: var(--teal-soft); }
+.flight-intelligence.medium { background: #fff0cb; }
+.flight-intelligence.high, .flight-intelligence.critical { background: #f9dcd8; }
+.flight-intelligence span, .flight-intelligence strong, .flight-intelligence small { display: block; overflow-wrap: anywhere; }
+.flight-intelligence span, .flight-intelligence small { color: var(--muted); font-size: 9px; }
+.flight-intelligence strong { margin: 3px 0; font-size: 13px; }
 .flight-smart-list { min-width: 0; display: grid; gap: 6px; }
 .flight-smart-row { min-width: 0; display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px 10px; border-radius: 11px; background: rgba(13,92,99,.05); }
 .flight-smart-row.current { background: var(--teal-soft); box-shadow: inset 3px 0 var(--teal); }
@@ -488,6 +502,7 @@ main {
   .hero-content { padding: 42px; }
   .command-header { padding: 36px; }
   .command-travel-meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .today-status-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .flight-watch-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .assistant-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .command-expense-snapshot, .command-quick-actions, .command-sync-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }

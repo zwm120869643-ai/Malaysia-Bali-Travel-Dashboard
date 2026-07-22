@@ -30,9 +30,23 @@ assert.equal(L.nextTravelAction(data.itinerary[1], [], [], new Date(2026, 6, 21,
 assert.equal(L.flightStatusLabel({ status: "scheduled", statusDetail: "Boarding" }, liveFlights[1]), "Boarding", "登机状态未标准化");
 assert.equal(L.flightStatusLabel({ status: "arrived" }, liveFlights[1]), "Landed", "抵达状态未标准化");
 assert.deepEqual(L.activeFlights(liveFlights, new Date(2026, 6, 21, 22, 0)).map((flight) => flight.flightNumber), ["OD306"], "已完成航班仍在追踪列表");
+assert.equal(L.itineraryBoundFlight(data.itinerary, [
+  { flightNumber: "AB123", date: "2026-07-22", departureTime: "08:00", arrivalTime: "09:00", status: "confirmed" },
+  liveFlights[1]
+], new Date(2026, 6, 22, 6, 0)).flightNumber, "OD306", "航班未优先绑定行程中的有效航班");
 assert.equal(L.nextTravelAction({ date: "2026-07-23", city: "Bali", transport: "", periods: { morning: [], noon: [], afternoon: [], evening: [] } }, [], [], new Date(2026, 6, 22, 20, 0), [{ id: "sea", title: "佩妮达岛西线 + 浮潜", category: "sea", incurredOn: "2026-07-23", paymentStatus: "paid" }]).type, "已付款活动", "Next Action 未识别已付款活动");
 const flightAction = L.nextTravelAction(data.itinerary[1], liveFlights, [], new Date(2026, 6, 21, 22, 0));
 assert.equal(L.travelCountdown(flightAction.at, new Date(2026, 6, 21, 22, 0)), "11小时", "下一事件倒计时错误");
+const delayedFlight = L.flightIntelligence(liveFlights[1], {
+  status: "delayed",
+  departure: { estimatedTime: "11:00", estimatedAt: "2026-07-22T03:00:00.000Z" },
+  arrival: { estimatedTime: "14:00", estimatedAt: "2026-07-22T06:00:00.000Z" }
+});
+assert.equal(delayedFlight.delayMinutes, 120, "Flight Intelligence 延误分钟计算错误");
+assert.equal(delayedFlight.impactLevel, "high", "长延误未标记为高影响");
+assert.match(L.nextTravelAction(data.itinerary[2], liveFlights, [], new Date(2026, 6, 22, 8, 0), [], delayedFlight).title, /11:00 → 14:00/, "Next Action 未使用预计航班时间");
+assert.equal(L.travelTimeline([data.itinerary[2]], new Date(2026, 6, 22, 9, 30), 8, delayedFlight)[0].timeLabel, "11:00", "延误后的航班未重新进入动态时间轴");
+assert.equal(L.activityRisk(data.itinerary[3]).level, "high", "出海活动未识别为高风险");
 assert.deepEqual(L.travelTimeline([
   { id: "today", date: "2026-07-21", periods: { morning: ["23:00 当前事件"], noon: [], afternoon: [], evening: [] } },
   { id: "tomorrow", date: "2026-07-22", periods: { morning: ["09:00 明日事件"], noon: [], afternoon: [], evening: [] } }
@@ -99,7 +113,7 @@ assert.match(app, /function renderHome\(\) \{\s*return renderCommandCenter\(\);/
 assert.match(app, /const privateMode = documentService\.authenticated && Boolean\(sharedSnapshot\)/, "私有 Command Center 数据缺少登录边界");
 assert.match(app, /privateMode \? `<div class="section-head"><div><p class="eyebrow">Expense Snapshot/, "公开模式未隔离费用金额");
 assert.match(app, /登录后才能编辑行程|登录后才能记账|登录后才能上传文件/, "公开快捷入口缺少登录写入门禁");
-assert.match(app, /const itinerary = itineraryDays\(\);[\s\S]*L\.travelTimeline\(itinerary, now, 8\)/, "首页未读取跨日合并行程");
+assert.match(app, /const itinerary = itineraryDays\(\);[\s\S]*L\.travelTimeline\(itinerary, now, 8, intelligence\)/, "首页未读取动态跨日合并行程");
 assert.match(app, /expense\.incurredOn === focusDay\.date/, "首页费用未限定当天");
 assert.match(app, /const documents = privateMode \? documentCounts\(\) : \{ total: 0 \}/, "首页未隔离读取 Document Center 状态");
 assert.match(app, /<h2>最近修改<\/h2>/, "Command Center 缺少最近修改");
@@ -109,6 +123,12 @@ assert.match(app, /当前地点|当前住宿|下一交通|下一活动/, "Comman
 assert.match(app, /flightActualTag\(actual\)/, "航班卡片未突出显示实际状态");
 assert.match(app, /L\.nextTravelAction\(/, "Command Center 未使用优先行动逻辑");
 assert.match(app, /L\.travelAssistantCore\(/, "Command Center 未接入 Travel Assistant Core");
+assert.match(app, /L\.flightIntelligence\(|flightIntelligence: intelligence/, "Command Center 未接入 Flight Intelligence");
+assert.match(app, /L\.activityRisk\(/, "Command Center 未接入活动风险检测");
+assert.match(app, /<h2>今日状态<\/h2>/, "Command Center 缺少 Today Status Card");
+assert.match(app, /Flight Intelligence · 延误影响/, "航班卡缺少延误影响");
+assert.match(app, /data-command-expense="\$\{category\}"/, "首页缺少快速记账分类");
+assert.match(app, /startExpenseCreate\(commandExpense\.dataset\.commandExpense\)/, "快速记账分类未传入账本表单");
 assert.match(app, /每日旅行简报|现在准备|在地建议/, "Travel Assistant Core 展示不完整");
 assert.match(app, /assistant\.nextAdvice/, "Next Action 未展示智能建议");
 assert.doesNotMatch(app, /DATA\.alerts\[1\]/, "行程页仍被固定旧航班提醒覆盖");

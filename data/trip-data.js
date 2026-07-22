@@ -9,10 +9,10 @@ window.TRIP_DATA = {
     origin: "成都",
     travelersCount: 2,
     status: "upcoming",
-    version: "1.6.0",
-    versionName: "Travel Assistant Core",
-    versionLabel: "主动旅行助手核心版",
-    lastUpdated: "2026-07-22T08:24:14+08:00",
+    version: "1.6.1",
+    versionName: "Travel Brain",
+    versionLabel: "旅行智能决策版",
+    lastUpdated: "2026-07-22T08:38:03+08:00",
     weatherNote: "天气自动更新；海况保持TBD",
     style: ["不赶行程", "城市观光", "海岛度假", "出海浮潜", "看日落", "情侣拍照", "酒店体验"]
   },
@@ -465,6 +465,7 @@ window.TRIP_DATA = {
     { id: "sea-safety", severity: "info", title: "出海安全", text: "提前服用晕船药，全程穿救生衣；风浪过大时接受取消或调整。", active: true }
   ],
   changeLog: [
+    { at: "2026-07-22T08:38:03+08:00", version: "1.6.1", change: "Added flight intelligence, delay impact, dynamic timeline, activity risk and quick expense categories" },
     { at: "2026-07-22T08:24:14+08:00", version: "1.6.0", change: "Added daily briefings, contextual next actions, preparation prompts and local tips" },
     { at: "2026-07-22T00:05:00+08:00", version: "1.5.7", change: "Made Command Center public-first with automatic flight binding and private write gates" },
     { at: "2026-07-21T23:18:15+08:00", version: "1.5.6", change: "Added cached Flight Watcher proxy, estimates, countdown and departure advice" },

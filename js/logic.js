@@ -243,6 +243,12 @@
     return activeFlights(flights, now)[0] || null;
   }
 
+  function itineraryBoundFlight(itinerary, flights, now) {
+    const active = activeFlights(flights, now);
+    const bound = active.find((flight) => (itinerary || []).some((day) => day.date === flight.date && JSON.stringify(day).toUpperCase().includes(String(flight.flightNumber || "").toUpperCase())));
+    return bound || active[0] || null;
+  }
+
   function flightStatusLabel(watch, flight) {
     if (/boarding/i.test(watch?.statusDetail || "")) return "Boarding";
     if (watch?.status === "cancelled" || flight?.status === "cancelled" || flight?.actualStatus === "取消") return "Cancelled";
@@ -252,17 +258,53 @@
     return "Scheduled";
   }
 
-  function nextTravelAction(day, flights, hotels, now, expenses) {
+  function flightIntelligence(flight, watch) {
+    if (!flight) return { status: "No Flight", todayStatus: "暂无后续航班", delayMinutes: 0, delayLabel: "无需计算", impactLevel: "low", impactLabel: "无影响", detail: "当前行程没有需要追踪的航班", departureAt: null, arrivalAt: null, departureTime: null, arrivalTime: null };
+    const status = flightStatusLabel(watch, flight);
+    const scheduledDeparture = travelDateTime(flight.date, flight.departureTime)?.getTime() ?? null;
+    const scheduledArrival = travelDateTime(flight.date, flight.arrivalTime)?.getTime() ?? null;
+    const watchedDeparture = Date.parse(watch?.departure?.estimatedAt || "");
+    const watchedArrival = Date.parse(watch?.arrival?.estimatedAt || "");
+    const departureAt = Number.isFinite(watchedDeparture) ? watchedDeparture : travelDateTime(flight.date, watch?.departure?.estimatedTime || flight.departureTime)?.getTime() ?? scheduledDeparture;
+    const arrivalAt = Number.isFinite(watchedArrival) ? watchedArrival : travelDateTime(flight.date, watch?.arrival?.estimatedTime || flight.arrivalTime)?.getTime() ?? scheduledArrival;
+    const delayMinutes = Math.max(0, Math.round(Math.max((departureAt - scheduledDeparture) || 0, (arrivalAt - scheduledArrival) || 0) / 60000));
+    let impactLevel = "low";
+    let impactLabel = "按计划";
+    let detail = "当前预计时间与计划一致";
+    if (status === "Cancelled") { impactLevel = "critical"; impactLabel = "严重"; detail = "航班取消，后续交通、住宿和活动需要重新确认"; }
+    else if (delayMinutes >= 120) { impactLevel = "high"; impactLabel = "高"; detail = `预计延误${delayMinutes}分钟，抵达、入住和后续活动需要顺延`; }
+    else if (delayMinutes >= 30 || status === "Delayed") { impactLevel = "medium"; impactLabel = "中"; detail = delayMinutes ? `预计延误${delayMinutes}分钟，优先复核接机和入住时间` : "已报告延误，预计时间尚未更新"; }
+    else if (delayMinutes > 0) { impactLabel = "低"; detail = `预计延误${delayMinutes}分钟，当前无需调整主要行程`; }
+    const todayStatus = status === "Cancelled" ? "立即处理航班" : status === "Delayed" ? "航班延误" : status === "Boarding" ? "准备登机" : status === "Departed" ? "飞行中" : status === "Landed" ? "已抵达" : "行程按计划";
+    return {
+      flightNumber: flight.flightNumber,
+      date: flight.date,
+      status,
+      todayStatus,
+      delayMinutes,
+      delayLabel: delayMinutes ? `${delayMinutes}分钟` : status === "Delayed" ? "延误待定" : "无延误",
+      impactLevel,
+      impactLabel,
+      detail,
+      departureAt,
+      arrivalAt,
+      departureTime: watch?.departure?.estimatedTime || flight.departureTime,
+      arrivalTime: watch?.arrival?.estimatedTime || flight.arrivalTime
+    };
+  }
+
+  function nextTravelAction(day, flights, hotels, now, expenses, flightIntel) {
     const reference = now || new Date();
     const flight = nextActiveFlight(flights, reference);
-    if (flight && daysBetween(dateKey(reference), flight.date) <= 1) {
-      const departure = travelDateTime(flight.date, flight.departureTime);
+    const intelligence = flightIntel?.flightNumber === flight?.flightNumber ? flightIntel : flightIntelligence(flight, null);
+    if (flight && intelligence.status !== "Landed" && daysBetween(dateKey(reference), flight.date) <= 1) {
+      if (intelligence.status === "Cancelled") return { type: "航班处置", id: flight.id, at: null, timeLabel: "立即", title: `${flight.flightNumber} 已取消 · 联系航空公司`, location: `${flight.departureAirport} → ${flight.arrivalAirport}` };
       return {
         type: "航班",
         id: flight.id,
-        at: departure?.getTime() ?? null,
-        timeLabel: `${formatDate(flight.date, { month: "numeric", day: "numeric" })} ${flight.departureTime}`,
-        title: `${flight.flightNumber} · ${flight.departureTime} → ${flight.arrivalTime}`,
+        at: intelligence.departureAt,
+        timeLabel: `${formatDate(flight.date, { month: "numeric", day: "numeric" })} ${intelligence.departureTime}`,
+        title: `${flight.flightNumber} · ${intelligence.departureTime} → ${intelligence.arrivalTime}`,
         location: `${flight.departureAirport} → ${flight.arrivalAirport}`
       };
     }
@@ -388,22 +430,40 @@
     };
   }
 
-  function travelTimeline(itinerary, now, limit) {
+  function travelTimeline(itinerary, now, limit, flightIntel) {
     const reference = now || new Date();
     const today = dateKey(reference);
     const count = Number.isSafeInteger(limit) && limit >= 0 ? limit : 8;
     return (itinerary || [])
-      .flatMap((day) => itineraryTimeline(day).map((item, order) => ({
-        ...item,
-        dayId: day.id,
-        date: day.date,
-        dateLabel: formatDate(day.date, { month: "numeric", day: "numeric" }),
-        at: travelDateTime(day.date, item.time)?.getTime() ?? null,
-        order
-      })))
+      .flatMap((day) => itineraryTimeline(day).map((item, order) => {
+        const sameFlightDay = flightIntel?.date === day.date;
+        const isDeparture = sameFlightDay && item.text.toUpperCase().includes(String(flightIntel.flightNumber || "").toUpperCase());
+        const isArrival = sameFlightDay && /arrival|抵达|到达/i.test(item.text);
+        const dynamicAt = isDeparture ? flightIntel.departureAt : isArrival ? flightIntel.arrivalAt : null;
+        const dynamicTime = isDeparture ? flightIntel.departureTime : isArrival ? flightIntel.arrivalTime : null;
+        return {
+          ...item,
+          time: dynamicTime || item.time,
+          timeLabel: dynamicTime || item.timeLabel,
+          dayId: day.id,
+          date: day.date,
+          dateLabel: formatDate(day.date, { month: "numeric", day: "numeric" }),
+          at: dynamicAt ?? travelDateTime(day.date, item.time)?.getTime() ?? null,
+          dynamic: Boolean(dynamicTime),
+          order
+        };
+      }))
       .filter((item) => item.date > today || (item.date === today && (item.at === null || item.at >= reference.getTime())))
       .sort((a, b) => a.date.localeCompare(b.date) || (a.at ?? Infinity) - (b.at ?? Infinity) || a.order - b.order)
       .slice(0, count);
+  }
+
+  // ponytail: keyword rules cover this fixed itinerary; add live weather only when a reliable free feed exists.
+  function activityRisk(day) {
+    const text = JSON.stringify(day || {});
+    if (/(出海|浮潜|snorkel|sea|penida|佩妮达|快船)/i.test(text)) return { level: "high", label: "高", title: "海况与船班", detail: "出海、快船和浮潜受海况影响，出发前确认供应商通知" };
+    if (/(日落|海滩|寺|徒步|户外|beach|sunset)/i.test(text)) return { level: "medium", label: "中", title: "天气与路况", detail: "户外活动受降雨、炎热和交通影响，保留时间缓冲" };
+    return { level: "low", label: "低", title: "常规安排", detail: "暂未发现需要提前调整的活动风险" };
   }
 
   function recentSharedChanges(itineraryOverrides, expenses, limit) {
@@ -450,5 +510,5 @@
     return Boolean(role && (expense?.createdBy === currentUserId || role === "owner"));
   }
 
-  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, activeFlights, nextActiveFlight, flightStatusLabel, nextTravelAction, travelCountdown, flightWatchTarget, flightDepartureAdvice, travelAssistantCore, travelTimeline, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
+  root.DashboardLogic = { parseISODate, dateKey, daysBetween, formatDate, tripMoment, currentItinerary, urgentTasks, transferBuffer, checklistProgress, inboxCounts, budgetTotals, itineraryDraft, mergeItineraryDay, mergeItinerary, addItineraryActivity, updateItineraryActivity, cancelItineraryActivity, moveItineraryActivity, itineraryTimeline, nextItineraryEvent, activeFlights, nextActiveFlight, itineraryBoundFlight, flightStatusLabel, flightIntelligence, nextTravelAction, travelCountdown, flightWatchTarget, flightDepartureAdvice, travelAssistantCore, travelTimeline, activityRisk, recentSharedChanges, parseExpenseAmount, expenseAmountValue, formatExpenseAmount, expenseLedgerTotals, canDeleteExpense };
 })(typeof window !== "undefined" ? window : globalThis);
